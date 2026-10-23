@@ -1,0 +1,107 @@
+.pricing-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  padding: 2.5rem 2.25rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--card-shadow);
+}
+
+.pricing-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--card-shadow-hover);
+  border-color: #cbd5e1;
+}
+
+.pricing-card.popular {
+  border: 2px solid var(--accent-indigo);
+  box-shadow: 0 20px 45px -10px rgba(99, 102, 241, 0.18), 0 0 0 1px var(--accent-indigo);
+  transform: scale(1.03);
+  background: #ffffff;
+}
+
+.pricing-card.popular:hover {
+  transform: scale(1.03) translateY(-6px);
+  box-shadow: 0 28px 55px -10px rgba(99, 102, 241, 0.25);
+}
+
+.popular-badge {
+  position: absolute;
+  top: -13px;
+  right: 2rem;
+  background: var(--gradient-primary);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.3rem 0.85rem;
+  border-radius: 9999px;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+  letter-spacing: 0.02em;
+}
+
+.tier-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.85rem;
+  letter-spacing: -0.01em;
+}
+
+.price-container {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.price {
+  font-size: 3.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.period {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.pricing-desc {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+  min-height: 44px;
+  line-height: 1.5;
+}
+
+.pricing-btn {
+  width: 100%;
+  margin-bottom: 2rem;
+  padding: 0.85rem;
+  font-size: 0.9375rem;
+}
+
+.pricing-features {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  font-size: 0.9375rem;
+  color: #334155;
+}
+
+.pricing-features li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.feature-check {
+  color: var(--accent-emerald);
+  font-weight: 800;
+  font-size: 1rem;
+}

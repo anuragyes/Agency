@@ -1,0 +1,24 @@
+Full, up-to-date list of every backend API: see BACKEND_APIS.md in this folder.
+
+GET /api/instagram/account gives your profile, stats and recent posts.
+POST /api/hashtags/instagram/explore with { "seeds": "ghee, desi ghee" } gives the hashtags and the real posts.  (moved from /api/instagram/hashtags/explore)
+GET /api/hashtags/instagram/quota shows how many of the 30 weekly searches you've used.  (moved from /api/instagram/hashtags/quota)
+GET /api/instagram/competitor?username=amul_india gives a brand's posts, engagement and hashtags.
+/instagram/followers now also returns following, post count, name and profile picture.
+
+Competitor Intelligence agents (13 Oct 2026) — details in BACKEND_APIS.md section 4b:
+GET  /api/competitor-research/agents           every agent + its skill (.md) file.
+POST /api/competitor-research/discover         { productId, seeds, known, useAI } -> verified competitor candidates.
+POST /api/competitor-research/pipeline         { productId, competitors, prompt, useAI, method } -> starts the agents (202).
+GET  /api/competitor-research/:id/progress     live agent progress (poll every second).
+POST /api/competitor-research/:id/results      results of published posts + strategy improvements.
+
+
+
+
+A niche hashtag is a specific hashtag used by a smaller, focused group of people. A broad hashtag is used by huge numbers of people.
+
+Using ghee as the example:
+
+Broad: #food, #healthyfood, #ghee. Millions of posts use these, so your post gets buried within minutes.
+Niche: #a2ghee, #bilonaghee, #desighee. Far fewer posts use them, but the people who search them want exactly that product. Your post stays visible longer and reaches the right buyers.

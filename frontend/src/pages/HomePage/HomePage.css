@@ -1,0 +1,28 @@
+/* ─────────────────────────────────────────────────────────────
+   HomePage.css — Modern light UI layout & micro-animations
+   ───────────────────────────────────────────────────────────── */
+
+.home-page {
+  position: relative;
+  min-height: 100vh;
+  background-color: #ffffff;
+  color: var(--text-primary);
+  overflow-x: hidden;
+  animation: fadeInPage 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeInPage {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.home-page main {
+  position: relative;
+  z-index: 1;
+}

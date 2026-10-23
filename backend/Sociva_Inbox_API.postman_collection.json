@@ -1,0 +1,205 @@
+{
+  "info": {
+    "name": "Sociva Unified Inbox API",
+    "description": "Postman collection for testing Sociva's Unified Social Media Inbox architecture: Webhooks, Backend Filter, Message Queue, AI Agent, and Replies.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Meta Webhook Verification (GET)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/api/inbox/webhook?hub.mode=subscribe&hub.verify_token=sociva_webhook_verify_token&hub.challenge=1158201244",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "inbox", "webhook"],
+          "query": [
+            { "key": "hub.mode", "value": "subscribe" },
+            { "key": "hub.verify_token", "value": "sociva_webhook_verify_token" },
+            { "key": "hub.challenge", "value": "1158201244" }
+          ]
+        },
+        "description": "Tests the verification challenge handshake that Meta (Instagram/Facebook) requires when you configure a webhook URL in Meta App Dashboard."
+      }
+    },
+    {
+      "name": "2. Meta Real Webhook Payload (POST)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"object\": \"instagram\",\n  \"entry\": [\n    {\n      \"id\": \"1288074147730315\",\n      \"time\": 1792303000,\n      \"messaging\": [\n        {\n          \"sender\": { \"id\": \"ig_user_postman_777\" },\n          \"recipient\": { \"id\": \"1288074147730315\" },\n          \"timestamp\": 1792303000000,\n          \"message\": {\n            \"mid\": \"mid_postman_webhook_123\",\n            \"text\": \"Hey! Can we book a 20-min product walkthrough next Tuesday?\"\n          }\n        }\n      ]\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/inbox/webhook",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "inbox", "webhook"]
+        },
+        "description": "Simulates Meta sending a real Instagram Messaging webhook event. Server immediately responds with EVENT_RECEIVED (200 OK), filters the event, queues to BullMQ, and invokes AI Agent."
+      }
+    },
+    {
+      "name": "3. Simulator: Customer Message (Passes Filter -> Queues to AI)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Could we get custom enterprise pricing for our agency with 20 seats?\",\n  \"senderName\": \"Sarah Jenkins\",\n  \"senderRole\": \"Agency Director\",\n  \"platform\": \"instagram\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/inbox/simulate",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "inbox", "simulate"]
+        },
+        "description": "Passes through Backend Filtering, gets enqueued to BullMQ AI queue, generates sentiment & intent score, and pushes live update to Socket.IO dashboard."
+      }
+    },
+    {
+      "name": "4. Simulator: Filter Test - Echo Message (Discarded)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Thanks for contacting Sociva!\",\n  \"senderName\": \"Brand Page\",\n  \"platform\": \"instagram\",\n  \"isEcho\": true\n}"
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/inbox/simulate",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "inbox", "simulate"]
+        },
+        "description": "Demonstrates Optimization #1 & #2: Backend filter discards brand echo messages before reaching AI or Socket.IO, preventing infinite reply loops."
+      }
+    },
+    {
+      "name": "5. Simulator: Filter Test - Spam Message (Discarded)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Buy 50,000 cheap followers fast! Telegram @promoboost discount link\",\n  \"senderName\": \"SpamBot_3000\",\n  \"platform\": \"instagram\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/inbox/simulate",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "inbox", "simulate"]
+        },
+        "description": "Demonstrates spam filtering: Irrelevant spam is dropped immediately, saving LLM token cost."
+      }
+    },
+    {
+      "name": "6. Get All Conversations (GET)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/api/inbox/conversations",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "inbox", "conversations"],
+          "query": [
+            { "key": "folder", "value": "all", "disabled": true },
+            { "key": "channel", "value": "instagram", "disabled": true },
+            { "key": "q", "value": "pricing", "disabled": true }
+          ]
+        },
+        "description": "Retrieves conversations sorted by most recent message, with support for folder, platform, and search filters."
+      }
+    },
+    {
+      "name": "7. Get Conversation Messages (GET)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/api/inbox/conversations/{{CONVERSATION_ID}}/messages",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "inbox", "conversations", "{{CONVERSATION_ID}}", "messages"]
+        },
+        "description": "Replace {{CONVERSATION_ID}} with an _id from the Get Conversations list to retrieve the full chat history."
+      }
+    },
+    {
+      "name": "8. Send Brand Reply (POST)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Hi Sarah! We would love to set up that walkthrough for your agency. Does Wednesday at 2 PM work for you?\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/inbox/conversations/{{CONVERSATION_ID}}/reply",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "inbox", "conversations", "{{CONVERSATION_ID}}", "reply"]
+        },
+        "description": "Sends reply via official Instagram Messaging API and persists in MongoDB, broadcasting live update via Socket.IO."
+      }
+    },
+    {
+      "name": "9. Get Inbox Telemetry & KPIs (GET)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/api/inbox/stats",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "inbox", "stats"]
+        },
+        "description": "Returns counts for auto-replied messages, avg response time, sales leads, and open issues."
+      }
+    },
+    {
+      "name": "10. Toggle Auto-Reply (POST)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"enabled\": true\n}"
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/inbox/auto-reply",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "inbox", "auto-reply"]
+        },
+        "description": "Toggles whether the AI agent automatically replies to qualifying incoming messages or leaves them as suggested drafts."
+      }
+    }
+  ]
+}

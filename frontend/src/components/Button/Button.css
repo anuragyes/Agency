@@ -1,0 +1,56 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 9999px; /* Pill shape */
+  border: none;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: inherit;
+  letter-spacing: -0.01em;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn-primary {
+  background: var(--gradient-primary);
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.45);
+}
+
+.btn-secondary {
+  background: #0f172a;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+}
+
+.btn-secondary:hover {
+  background: #1e293b;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.28);
+}
+
+.btn-outline {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.btn-outline:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+}
