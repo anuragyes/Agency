@@ -46,7 +46,7 @@ const pool = async (items, size, fn) => {
 const slimPosts = ({ rows, ...rest }) => rest;
 
 // ───────── start ─────────
-const startPipeline = async ({ productId, competitors = [], prompt = "", useAI = true, method = "manual", platform = "instagram" } = {}) => {
+const startPipeline = async ({ productId, competitors = [], prompt = "", useAI = true, method = "manual", platform = "instagram", userId } = {}) => {
     const provider = getProvider(platform);
     if (provider.id !== "instagram") throw badRequest("The agent pipeline runs on Instagram data.");
     if (!mongoose.isValidObjectId(productId)) throw badRequest("Choose your product (Brand Brain) first.");
@@ -57,6 +57,8 @@ const startPipeline = async ({ productId, competitors = [], prompt = "", useAI =
     if (!usernames.length) throw badRequest("Add at least one competitor.");
     if (usernames.length > max) throw badRequest(`Max ${max} competitors per run.`);
 
+    const effectiveUserId = userId || product.userId;
+
     const pipeline = freshPipeline();
     pipeline.counters.competitors = usernames.length;
     const doc = await CompetitorResearch.create({
@@ -64,18 +66,19 @@ const startPipeline = async ({ productId, competitors = [], prompt = "", useAI =
         competitors: usernames, prompt: String(prompt || "").slice(0, 2000), status: "running",
         method: method === "discovery" ? "discovery" : "manual", useAI: useAI !== false, pipeline,
     });
-    setImmediate(() => runPipeline(doc._id, { product, provider, usernames, prompt: doc.prompt, useAI: doc.useAI, pipeline })
+    setImmediate(() => runPipeline(doc._id, { product, provider, usernames, prompt: doc.prompt, useAI: doc.useAI, pipeline, userId: effectiveUserId })
         .catch((err) => console.error("[CompetitorIntel] pipeline crashed:", err)));
     return doc.toObject();
 };
 
 // ───────── the run ─────────
-const runPipeline = async (reportId, { product, provider, usernames, prompt, useAI, pipeline }) => {
+const runPipeline = async (reportId, { product, provider, usernames, prompt, useAI, pipeline, userId }) => {
     const cfgO = skillConfig("orchestrator");
     const t = new ProgressTracker(reportId, pipeline, { saveEveryMs: cfgO.saveEveryMs || 700 });
     const started = Date.now();
     const brand = product.aiProfile || {};
     const result = { data: null, analysis: null, analysisError: null, intelligence: null };
+    const accountOpts = { productId: product._id, userId: userId || product.userId };
 
     try {
         // 0. Orchestrator
@@ -91,7 +94,7 @@ const runPipeline = async (reportId, { product, provider, usernames, prompt, use
         await pool(usernames, cfgO.researchConcurrency || 3, async (u) => {
             t.child("competitor_research", u, { status: "running", startedAt: new Date().toISOString() });
             try {
-                const raw = await provider.fetchAccount(u);
+                const raw = await provider.fetchAccount(u, accountOpts);
                 t.count("apiCalls");
                 const a = analyzeAccount(raw);
                 rawAccounts.push(raw); accounts.push(a);
@@ -123,7 +126,7 @@ const runPipeline = async (reportId, { product, provider, usernames, prompt, use
         const notes = [];
         let me = null, meRaw = null, ownComments = [], ownCommentsNote = null;
         try {
-            meRaw = await provider.fetchMine();
+            meRaw = await provider.fetchMine(accountOpts);
             t.count("apiCalls");
             if (meRaw?.recentPosts?.length) me = analyzeAccount(meRaw);
             else notes.push("Your own account has no posts we could read, so the report compares competitors only.");

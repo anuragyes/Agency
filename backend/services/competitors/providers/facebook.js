@@ -18,8 +18,8 @@ module.exports = {
     notes: ["Reading other Pages needs Meta's \"Page Public Content Access\" approval. Pages you manage work right away."],
     dataNote: "Facebook does not share reach or impressions for other Pages; \"likes\" here means all reactions.",
 
-    lookup: async (ref) => {
-        const a = await getFacebookCompetitorPage(ref, { postLimit: 9 });
+    lookup: async (ref, opts = {}) => {
+        const a = await getFacebookCompetitorPage(ref, { postLimit: 9, ...opts });
         return {
             username: a.profile.username,
             name: a.profile.name,
@@ -33,7 +33,7 @@ module.exports = {
         };
     },
 
-    fetchAccount: (ref) => getFacebookCompetitorPage(ref, { postLimit: MEDIA_LIMIT }),
+    fetchAccount: (ref, opts = {}) => getFacebookCompetitorPage(ref, { postLimit: MEDIA_LIMIT, ...opts }),
 
-    fetchMine: () => getFacebookPageOverview({ postLimit: MEDIA_LIMIT }),
+    fetchMine: (opts = {}) => getFacebookPageOverview({ postLimit: MEDIA_LIMIT, ...opts }),
 };

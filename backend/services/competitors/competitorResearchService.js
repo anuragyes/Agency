@@ -37,7 +37,7 @@ const buildPostResearch = (analysis, comparison, platform) => {
     };
 };
 
-const runCompetitorResearch = async ({ productId, platform = "instagram", competitors = [], prompt = "" } = {}) => {
+const runCompetitorResearch = async ({ productId, platform = "instagram", competitors = [], prompt = "", userId } = {}) => {
     const provider = getProvider(platform);
     if (!mongoose.isValidObjectId(productId)) throw badRequest("Choose your product (Brand Brain) first.");
     const product = await Product.findById(productId).lean();
@@ -46,6 +46,9 @@ const runCompetitorResearch = async ({ productId, platform = "instagram", compet
     const usernames = [...new Set((Array.isArray(competitors) ? competitors : [competitors]).map(cleanUsername).filter(Boolean))];
     if (!usernames.length) throw badRequest("Add at least one competitor.");
     if (usernames.length > MAX_COMPETITORS) throw badRequest(`Max ${MAX_COMPETITORS} competitors per report.`);
+
+    const effectiveUserId = userId || product.userId;
+    const accountOpts = { productId: product._id, userId: effectiveUserId };
 
     const started = Date.now();
     const doc = await CompetitorResearch.create({
@@ -59,7 +62,7 @@ const runCompetitorResearch = async ({ productId, platform = "instagram", compet
         const failed = [];
         for (const u of usernames) {
             try {
-                accounts.push(analyzeAccount(await provider.fetchAccount(u)));
+                accounts.push(analyzeAccount(await provider.fetchAccount(u, accountOpts)));
             } catch (err) {
                 failed.push({ username: u, error: err.message || apiErrorMessage(err), statusCode: err.statusCode });
             }
@@ -73,7 +76,7 @@ const runCompetitorResearch = async ({ productId, platform = "instagram", compet
         const notes = [];
         let me = null;
         try {
-            const mine = await provider.fetchMine();
+            const mine = await provider.fetchMine(accountOpts);
             if (mine?.recentPosts?.length) me = analyzeAccount(mine);
             else notes.push("Your own account has no posts we could read, so the report compares competitors only.");
         } catch (err) {

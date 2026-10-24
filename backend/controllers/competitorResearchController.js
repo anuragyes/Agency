@@ -27,7 +27,7 @@ module.exports = {
     // POST /  { productId, platform, competitors: ["amul_india"], prompt }
     run: wrap(async (req, res) => {
         const { productId, platform, competitors, prompt } = req.body || {};
-        res.status(201).json({ success: true, data: await svc.runCompetitorResearch({ productId, platform, competitors, prompt }) });
+        res.status(201).json({ success: true, data: await svc.runCompetitorResearch({ productId, platform, competitors, prompt, userId: req.user?._id }) });
     }),
 
     // GET /product/:productId  -> history
@@ -55,10 +55,10 @@ module.exports = {
     agents: (req, res) => res.json({ success: true, data: intel.listAgents() }),
 
     // POST /discover { productId, seeds?, known?, useAI? } -> verified competitor candidates (Method 2)
-    discover: wrap(async (req, res) => res.json({ success: true, data: await discoverCompetitors(req.body || {}) })),
+    discover: wrap(async (req, res) => res.json({ success: true, data: await discoverCompetitors({ ...(req.body || {}), userId: req.user?._id }) })),
 
     // POST /pipeline { productId, competitors, prompt, useAI, method } -> 202, runs in the background
-    startPipeline: wrap(async (req, res) => res.status(202).json({ success: true, data: await intel.startPipeline(req.body || {}) })),
+    startPipeline: wrap(async (req, res) => res.status(202).json({ success: true, data: await intel.startPipeline({ ...(req.body || {}), userId: req.user?._id }) })),
 
     // GET /:id/progress -> live agent status (poll while status === "running")
     progress: wrap(async (req, res) => res.json({ success: true, data: await intel.getProgress(req.params.id) })),
