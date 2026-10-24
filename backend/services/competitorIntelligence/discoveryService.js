@@ -51,7 +51,7 @@ const scoreCandidate = (acc, { brand, bw, seedTags = [], sources = [], weights =
     const parts = { keywordFit, hashtagFit, activity, size, multiSource };
     let sum = 0, ws = 0;
     Object.entries(weights).forEach(([k, v]) => { sum += (parts[k] || 0) * v; ws += v; });
-    
+
     let baseScore = round(ws ? sum / ws : 0);
     if (isPromptMatch) {
         baseScore = Math.max(baseScore, 65 + Math.min(30, (phraseHits.length + wordHits.length) * 5));
@@ -114,7 +114,7 @@ const discoverCompetitors = async ({ productId, prompt = "", userPrompt = "", se
             let input;
             if (searchPrompt) {
                 input = `User Target Prompt: "${searchPrompt}"\n` +
-                        `Suggest 25 to 30 real, official Instagram usernames strictly matching the user prompt. Return valid JSON only: {"usernames": [...]}`;
+                    `Suggest 25 to 30 real, official Instagram usernames strictly matching the user prompt. Return valid JSON only: {"usernames": [...]}`;
             } else {
                 input = `<brand>${JSON.stringify({
                     name: brand.name,
@@ -167,7 +167,7 @@ const discoverCompetitors = async ({ productId, prompt = "", userPrompt = "", se
     // 3. Mentions in the captions of competitors you already picked
     for (const u of [...knownSet].slice(0, 5)) {
         try {
-            const acc = await getCompetitorAccount(u, { mediaLimit: 12 });
+            const acc = await getCompetitorAccount(u, { mediaLimit: 12, productId });
             let found = 0;
             acc.recentPosts.forEach((p) => mentionsOf(p.caption).forEach((m) => { add(m, `@${u} mentions`); found++; }));
             steps.push({ source: "mentions", of: `@${u}`, found });
@@ -192,7 +192,7 @@ const discoverCompetitors = async ({ productId, prompt = "", userPrompt = "", se
         while (i < ordered.length) {
             const [u, src] = ordered[i++];
             try {
-                const acc = await getCompetitorAccount(u, { mediaLimit: cfg.mediaLimit || 6 });
+                const acc = await getCompetitorAccount(u, { mediaLimit: cfg.mediaLimit || 6, productId });
                 const sources = [...src];
                 const isPromptMatch = sources.some((x) => x.includes("AI"));
                 const s = scoreCandidate(acc, { brand, bw, seedTags, sources, weights: cfg.weights || {}, isPromptMatch, searchPrompt });
