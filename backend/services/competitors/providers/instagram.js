@@ -19,8 +19,8 @@ module.exports = {
     notAvailable: ["shares", "saves", "reach", "story data", "personal / private accounts"],
 
     /** Quick check for the search box -> one profile card with stats and posts */
-    lookup: async (username) => {
-        const a = await getCompetitorAccount(username, { mediaLimit: 12 });
+    lookup: async (username, opts = {}) => {
+        const a = await getCompetitorAccount(username, { mediaLimit: 12, ...opts });
         return {
             username: a.profile.username,
             name: a.profile.name,
@@ -48,8 +48,8 @@ module.exports = {
     },
 
     /** Full data for the report */
-    fetchAccount: (username) => getCompetitorAccount(username, { mediaLimit: MEDIA_LIMIT }),
+    fetchAccount: (username, opts = {}) => getCompetitorAccount(username, { mediaLimit: MEDIA_LIMIT, ...opts }),
 
     /** Your own account (for "you vs them"). Returns null when it can't be read. */
-    fetchMine: async () => getInstagramAccountOverview({ mediaLimit: MEDIA_LIMIT }),
+    fetchMine: async (opts = {}) => getInstagramAccountOverview({ mediaLimit: MEDIA_LIMIT, ...opts }),
 };

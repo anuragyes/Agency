@@ -157,28 +157,28 @@ const getInstagramAccountOverview = async ({ productId, userId, mediaLimit = 25,
     };
 };
 
-const getCompetitorAccount = async (rawUsername, { mediaLimit = 30, productId, customToken, customUserId } = {}) => {
+const getCompetitorAccount = async (rawUsername, { mediaLimit = 30, productId, userId: authUserId, customToken, customUserId } = {}) => {
     const username = String(rawUsername || "").trim().replace(/^@/, "").toLowerCase();
     if (!/^[a-z0-9._]{1,30}$/.test(username)) {
         throw Object.assign(new Error("Enter a valid Instagram username"), { statusCode: 400 });
     }
 
     let accessToken = customToken;
-    let userId = customUserId;
+    let igUserId = customUserId;
 
-    if (!accessToken || !userId) {
-        const creds = await getAccountCredentials({ productId, platform: "instagram" });
+    if (!accessToken || !igUserId) {
+        const creds = await getAccountCredentials({ productId, userId: authUserId, platform: "instagram" });
         if (creds?.accessToken) {
             accessToken = creds.accessToken;
-            userId = creds.accountId;
+            igUserId = creds.accountId;
         }
     }
 
     if (!accessToken) accessToken = process.env.META_ACCESS_TOKEN;
-    if (!userId) userId = process.env.META_INSTAGRAM_USER_ID;
+    if (!igUserId) igUserId = process.env.META_INSTAGRAM_USER_ID;
     const version = process.env.META_GRAPH_API_VERSION || process.env.INSTAGRAM_API_VERSION || "v23.0";
 
-    if (!accessToken || !userId) {
+    if (!accessToken || !igUserId) {
         throw Object.assign(new Error("No Instagram Business account connected. Please connect via Meta OAuth in Social Accounts."), { statusCode: 400 });
     }
 
@@ -192,7 +192,7 @@ const getCompetitorAccount = async (rawUsername, { mediaLimit = 30, productId, c
     let data;
     try {
         data = await getWithFallback(
-            `${FB_GRAPH}/${version}/${userId}`,
+            `${FB_GRAPH}/${version}/${igUserId}`,
             { access_token: accessToken },
             mediaFields.map((mf) => `business_discovery.username(${username}){${profileFields},media.limit(${mediaLimit}){${mf}}}`)
         );

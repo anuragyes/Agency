@@ -129,7 +129,10 @@ const getInstagramAccount = async (req, res, next) => {
 // GET /api/instagram/competitor?username=nike — a top brand's posts, engagement and hashtags
 const getInstagramCompetitor = async (req, res, next) => {
     try {
-        const data = await getCompetitorAccount(req.query.username);
+        const data = await getCompetitorAccount(req.query.username, {
+            productId: req.query.productId,
+            userId: req.user?._id,
+        });
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);

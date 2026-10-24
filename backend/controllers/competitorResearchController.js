@@ -15,7 +15,13 @@ module.exports = {
     // GET /:platform/lookup?username=amul_india  -> one real profile card
     lookup: wrap(async (req, res) => {
         const provider = getProvider(req.params.platform);
-        res.json({ success: true, data: await provider.lookup(intel.cleanUsername(req.query.username)) });
+        res.json({
+            success: true,
+            data: await provider.lookup(intel.cleanUsername(req.query.username), {
+                productId: req.query.productId,
+                userId: req.user?._id,
+            }),
+        });
     }),
 
     // POST /  { productId, platform, competitors: ["amul_india"], prompt }
