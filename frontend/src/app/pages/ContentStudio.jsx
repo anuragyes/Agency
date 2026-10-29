@@ -1315,13 +1315,6 @@ export default function ContentStudio() {
                     >
                       AI Generated Image
                     </Btn>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      hidden
-                      accept="image/jpeg,image/png,video/mp4,video/quicktime"
-                      onChange={handleFileUpload}
-                    />
                   </div>
                 </div>
               )}
@@ -1525,6 +1518,15 @@ export default function ContentStudio() {
           </form>
         </Modal>
       )}
+
+      {/* ───── Hidden file input (always mounted so fileInputRef works on all steps) ───── */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        hidden
+        accept="image/jpeg,image/png,video/mp4,video/quicktime"
+        onChange={handleFileUpload}
+      />
 
       {/* ───── Modals ───── */}
       <CreateProjectModal
