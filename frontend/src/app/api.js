@@ -187,6 +187,10 @@ export const startMarketResearch = (productId, platforms) =>
 export const getLatestMarketResearch = (productId) =>
   call(`/api/market-research/product/${productId}/latest`).then((r) => r.data);
 
+/** Project-specific Google Trends interest-over-time data. */
+export const getProjectTrends = ({ terms, geo = "" }) =>
+  call("/api/trends/topics", { method: "POST", body: { terms, geo } }).then((r) => r.data);
+
 /* ── Instagram connection ── */
 export const testInstagram = () => call("/api/instagram/test").then((r) => r.data);
 
@@ -330,5 +334,24 @@ export const getMetaConnectUrl = (productId) =>
   call(`/api/auth/meta/connect${productId ? `?productId=${encodeURIComponent(productId)}` : ""}`, {
     headers: { Accept: "application/json" },
   });
+
+/* ── YouTube Channel API (YouTube Data API v3) ── */
+export const getYoutubeAccount = (productId) =>
+  call(`/api/youtube/account${productId ? `?productId=${encodeURIComponent(productId)}` : ""}`);
+
+export const connectYoutubeChannel = ({ channelQuery, productId }) =>
+  call("/api/youtube/connect", {
+    method: "POST",
+    body: { channelQuery, productId },
+  });
+
+export const disconnectYoutubeChannel = (productId) =>
+  call("/api/youtube/disconnect", {
+    method: "POST",
+    body: { productId },
+  });
+
+export const testYoutube = () => call("/api/youtube/test");
+
 
 

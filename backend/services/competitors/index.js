@@ -5,13 +5,14 @@
 // ─────────────────────────────────────────────────────────────
 const instagram = require("./providers/instagram.js");
 const facebook = require("./providers/facebook.js");
+const youtube = require("./providers/youtube.js");
 
 const soon = (id, name, notes) => ({ id, name, implemented: false, notes });
 
 const PROVIDERS = [
     instagram,
+    youtube,
     facebook,
-    soon("youtube", "YouTube", ["Possible with the free YouTube Data API v3: any public channel's subscribers, videos, views, likes, comments, tags."]),
     soon("x", "X", ["Possible with the paid X API (pay per use): public profiles and posts."]),
     soon("threads", "Threads", ["Threads API keyword search needs Meta app review."]),
     soon("pinterest", "Pinterest", ["Pinterest API v5 can read public pins / boards (limited on Trial access)."]),

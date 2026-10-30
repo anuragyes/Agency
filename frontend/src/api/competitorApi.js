@@ -57,14 +57,28 @@ export const approveCompetitorReport = (id) => call(`${BASE}/${encodeURIComponen
 export const linkReportPost = (id, { ideaIndex, postId }) =>
   call(`${BASE}/${encodeURIComponent(id)}/posts`, { method: "POST", body: { ideaIndex, postId } }).then((r) => r.data);
 
-/** "https://www.instagram.com/blue_tokai/?hl=en" | "@blue_tokai" -> "blue_tokai" */
-export const cleanInstagramInput = (v) => String(v || "").trim()
-  .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/[/?#].*$/, "").replace(/^@/, "").toLowerCase();
+/** Clean input for Instagram, YouTube, or Facebook lookups */
+export const cleanInstagramInput = (v) => {
+  const raw = String(v || "").trim();
+  if (!raw) return "";
+  if (raw.includes("youtube.com") || raw.includes("youtu.be")) {
+    const channelId = raw.match(/UC[a-zA-Z0-9_-]{22}/);
+    if (channelId) return channelId[0];
+    const handle = raw.match(/@([a-zA-Z0-9._-]+)/);
+    if (handle) return `@${handle[1]}`;
+    return raw;
+  }
+  return raw
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
+    .replace(/[/?#].*$/, "")
+    .replace(/^@/, "")
+    .toLowerCase();
+};
 
 export const listIntelAgents = () => call(`${BASE}/agents`).then((r) => r.data);
 export const discoverCompetitors = ({ productId, prompt, seeds, known, useAI }) =>
   call(`${BASE}/discover`, { method: "POST", body: { productId, prompt, seeds, known, useAI } }).then((r) => r.data);
-export const startIntelPipeline = ({ productId, competitors, prompt, useAI, method }) =>
-  call(`${BASE}/pipeline`, { method: "POST", body: { productId, platform: "instagram", competitors, prompt, useAI, method } }).then((r) => r.data);
+export const startIntelPipeline = ({ productId, platform = "instagram", competitors, prompt, useAI, method }) =>
+  call(`${BASE}/pipeline`, { method: "POST", body: { productId, platform, competitors, prompt, useAI, method } }).then((r) => r.data);
 export const getPipelineProgress = (id) => call(`${BASE}/${encodeURIComponent(id)}/progress`).then((r) => r.data);
 export const analyzeReportResults = (id) => call(`${BASE}/${encodeURIComponent(id)}/results`, { method: "POST" }).then((r) => r.data);

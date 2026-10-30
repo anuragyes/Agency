@@ -1,11 +1,20 @@
-// Social accounts — Instagram + Facebook are LIVE (GET /api/instagram/account, GET /api/facebook/account: real followers, engagement, posts); other channels are demo
+// Social accounts — Instagram, Facebook, and YouTube are LIVE; other channels are demo
 import { useEffect, useState } from "react";
 import Icon, { PlatformIcon } from "../ui/Icon";
 import { Btn, Card, DemoTag, LiveTag, Modal, PageHeader, Pill, Segmented, Spinner, Toggle, fmt, timeAgo, useToast } from "../ui/kit";
 import IgPostCard from "../ui/IgPostCard";
 import { Sparkline } from "../ui/charts";
 import { ACCOUNTS } from "../mock";
-import { API_BASE, getFacebookAccount, getInstagramAccount, getConnectedAccounts, disconnectAccount } from "../api";
+import {
+  API_BASE,
+  getFacebookAccount,
+  getInstagramAccount,
+  getConnectedAccounts,
+  disconnectAccount,
+  getYoutubeAccount,
+  connectYoutubeChannel,
+  disconnectYoutubeChannel,
+} from "../api";
 import { useWorkspace } from "../store";
 
 export default function SocialAccounts() {
@@ -17,6 +26,9 @@ export default function SocialAccounts() {
   const [ig, setIg] = useState({ state: "loading" });
   const [connect, setConnect] = useState(null);
   const [fb, setFb] = useState({ state: "loading" });
+  const [yt, setYt] = useState({ state: "loading" });
+  const [ytChannelInput, setYtChannelInput] = useState("");
+  const [connectingYt, setConnectingYt] = useState(false);
   const [oauthAccounts, setOauthAccounts] = useState([]);
   const [loadingOAuth, setLoadingOAuth] = useState(false);
 
@@ -78,29 +90,81 @@ export default function SocialAccounts() {
       setFb({ state: "error", msg: e.message });
     }
   };
-  const checkAll = () => { check(); checkFb(); loadOauthAccounts(); };
+  const checkYt = async () => {
+    setYt({ state: "loading" });
+    try {
+      const r = await getYoutubeAccount(current?._id);
+      if (r?.connected && r?.data) {
+        setYt({ state: "ok", data: r.data, account: r.account });
+      } else {
+        setYt({ state: "idle", data: null });
+      }
+    } catch (e) {
+      setYt({ state: "error", msg: e.message });
+    }
+  };
+  const checkAll = () => { check(); checkFb(); checkYt(); loadOauthAccounts(); };
   useEffect(() => { checkAll(); }, [current?._id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleConnectYoutube = async (e) => {
+    e?.preventDefault?.();
+    if (!ytChannelInput.trim()) {
+      toast("Please enter your YouTube channel handle or URL", "error");
+      return;
+    }
+    setConnectingYt(true);
+    try {
+      const r = await connectYoutubeChannel({
+        channelQuery: ytChannelInput.trim(),
+        productId: current?._id,
+      });
+      toast(r.message || "YouTube channel connected successfully!", "success");
+      setConnect(null);
+      setYtChannelInput("");
+      checkYt();
+      loadOauthAccounts();
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      setConnectingYt(false);
+    }
+  };
 
   const live = ig.data;
   const igStats = live?.stats;
   const fbLive = fb.data;
   const fbStats = fbLive?.stats;
-  const liveOf = { instagram: ig, facebook: fb };
-  const ENV_HINT = { instagram: "Connect via Meta OAuth 2.0 or check backend credentials.", facebook: "Connect via Meta OAuth 2.0 or check backend credentials." };
+  const ytLive = yt.data;
+  const ytStats = ytLive?.stats;
+  const liveOf = { instagram: ig, facebook: fb, youtube: yt };
+  const ENV_HINT = {
+    instagram: "Connect via Meta OAuth 2.0 or check backend credentials.",
+    facebook: "Connect via Meta OAuth 2.0 or check backend credentials.",
+    youtube: "Verify your channel handle or YOUTUBE_API_KEY in backend/.env.",
+  };
   const view = accts.map((a) => {
     const oauthAcc = oauthAccounts.find((o) => o.platform === a.key && o.status === "connected");
     const L = liveOf[a.key];
     if (!L) return a;
     const d = L.data;
     const st = d?.stats;
-    const oauthHandle = oauthAcc?.username ? (a.key === "instagram" ? `@${oauthAcc.username}` : oauthAcc.name || `@${oauthAcc.username}`) : null;
+    const oauthHandle = oauthAcc?.username ? (a.key === "instagram" ? `@${oauthAcc.username}` : a.key === "youtube" ? (oauthAcc.username.startsWith("@") ? oauthAcc.username : `@${oauthAcc.username}`) : oauthAcc.name || `@${oauthAcc.username}`) : null;
     const isConnected = L.state === "ok" || Boolean(oauthAcc && L.state !== "error");
+
+    let displayHandle = a.handle;
+    if (d) {
+      if (a.key === "instagram") displayHandle = ig.user ? `@${ig.user}` : a.handle;
+      else if (a.key === "facebook") displayHandle = d?.profile?.name || a.handle;
+      else if (a.key === "youtube") displayHandle = d?.profile?.username ? (d.profile.username.startsWith("@") ? d.profile.username : `@${d.profile.username}`) : d?.profile?.name || a.handle;
+    } else if (oauthHandle) {
+      displayHandle = oauthHandle;
+    }
 
     return {
       ...a,
-      handle: d ? (a.key === "instagram" ? (ig.user ? `@${ig.user}` : a.handle) : d?.profile?.name || a.handle) : (oauthHandle || a.handle),
+      handle: displayHandle,
       status: isConnected ? "connected" : L.state === "error" ? "reconnect" : a.status,
-      live: true,
+      live: isConnected || L.state === "ok" || L.state === "error",
       // real numbers when the API answered, "—" while loading / on error (never demo numbers)
       followers: d ? fmt(d.profile.followers) : "—",
       eng: st?.engagementRate != null ? `${st.engagementRate}%` : "—",
@@ -324,6 +388,57 @@ export default function SocialAccounts() {
           )}
         </Card>
       )}
+
+      {ytLive && (
+        <Card className="mt" title={<span className="row" style={{ gap: 10 }}>YouTube Channel — live overview <LiveTag>YouTube API v3</LiveTag></span>}
+          sub={`Real data from your connected channel · updated ${timeAgo(ytLive.fetchedAt)}`}
+          action={<Btn size="sm" icon="refresh" onClick={checkYt}>Refresh</Btn>}>
+          <div className="row">
+            {ytLive.profile.profilePictureUrl ? <img className="sa-profile-pic" src={ytLive.profile.profilePictureUrl} alt="" referrerPolicy="no-referrer" /> : <PlatformIcon platform="youtube" size={52} radius={26} />}
+            <div className="grow">
+              <b className="strong" style={{ fontSize: 17 }}>{ytLive.profile.name}</b> <Pill tone="red">@{ytLive.profile.username}</Pill>
+              <div className="small muted">{ytLive.profile.biography ? ytLive.profile.biography.slice(0, 160) : ""}</div>
+            </div>
+            {ytLive.profile.website && <a className="sa-link" href={ytLive.profile.website} target="_blank" rel="noreferrer">Open Channel <Icon name="arrowUpRight" size={14} /></a>}
+          </div>
+          <div className="sa-grid g-6 mt">
+            {[
+              ["Subscribers", fmt(ytLive.profile.followers)],
+              ["Total views", fmt(ytLive.profile.totalViews)],
+              ["Videos", fmt(ytLive.profile.mediaCount)],
+              ["Avg views", fmt(ytStats?.avgViews)],
+              ["Avg likes", fmt(ytStats?.avgLikes)],
+              ["Eng. rate", ytStats?.engagementRate != null ? `${ytStats.engagementRate}%` : "—"],
+            ].map(([k, v]) => <div key={k} className="sa-kv" style={{ gridTemplateColumns: "1fr" }}><div><span>{k}</span><b>{v}</b></div></div>)}
+          </div>
+          <p className="small faint">Engagement rate = average (likes + comments) per video ÷ subscribers, analyzed across your recent {ytStats?.postsAnalyzed || ytLive.recentPosts?.length || 0} videos · {ytStats?.postsPerWeek || 0} videos / week.</p>
+          {ytLive.recentPosts?.length > 0 && (
+            <>
+              <h4 style={{ margin: "18px 0 8px" }}>Recent videos & Shorts</h4>
+              <div className="row wrap" style={{ gap: 12 }}>
+                {ytLive.recentPosts.slice(0, 6).map((v) => (
+                  <a key={v.id} href={v.permalink} target="_blank" rel="noreferrer"
+                     style={{ textDecoration: "none", color: "inherit", width: 160, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ position: "relative", width: "100%", height: 96, borderRadius: 10, overflow: "hidden", background: "#000" }}>
+                      <img src={v.imageUrl} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <span style={{ position: "absolute", bottom: 4, right: 4, background: "rgba(0,0,0,0.75)", color: "#fff", fontSize: 10, padding: "2px 5px", borderRadius: 4 }}>
+                        {v.productType === "REELS" ? "Short" : "Video"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.3 }}>
+                      {v.caption}
+                    </div>
+                    <div className="faint" style={{ fontSize: 11 }}>
+                      {fmt(v.views)} views · {fmt(v.likes)} likes
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+
       <div className="sa-banner mt">
         <span className="sa-banner-ic"><Icon name="bulb" size={22} /></span>
         <div className="sa-banner-body"><h4>Your audience overlaps 64% with Threads users</h4><p>Connecting Threads could add ~12K reach per week with repurposed X content.</p></div>
@@ -335,6 +450,51 @@ export default function SocialAccounts() {
           <div className="sa-grid g-3" style={{ gap: 10 }}>
             {ACCOUNTS.map((a) => <button key={a.key} type="button" className="sa-goal" style={{ flexDirection: "column", alignItems: "center", textAlign: "center" }} onClick={() => setConnect(a)}><PlatformIcon platform={a.key} size={40} /><b style={{ fontSize: 13.5 }}>{a.name}</b></button>)}
           </div>
+        ) : connect?.key === "youtube" ? (
+          <form onSubmit={handleConnectYoutube} style={{ display: "grid", gap: 16 }}>
+            <div className="row" style={{ gap: 14, alignItems: "center", padding: "14px 16px", background: "var(--sa-bg)", borderRadius: 14, border: "1px solid var(--sa-border)" }}>
+              <PlatformIcon platform="youtube" size={44} />
+              <div>
+                <b style={{ fontSize: 16 }}>Connect YouTube Channel (Data API v3)</b>
+                <p className="small muted" style={{ margin: "2px 0 0" }}>
+                  Enter your YouTube channel handle, URL, or channel ID to sync live subscriber counts, views, engagement rate, and recent videos.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              <label className="strong" style={{ fontSize: 13.5 }}>
+                Channel Handle, URL or Channel ID <span className="red">*</span>
+              </label>
+              <input
+                type="text"
+                className="sa-input"
+                value={ytChannelInput}
+                onChange={(e) => setYtChannelInput(e.target.value)}
+                placeholder="e.g. @mkbhd, @mrbeast, or youtube.com/@yourchannel"
+                style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14.5 }}
+                autoFocus
+              />
+              <p className="small faint" style={{ margin: 0 }}>
+                We use your secure Google YouTube Data API key to fetch verified public channel metrics and videos in real time.
+              </p>
+            </div>
+
+            <div className="row" style={{ justifyContent: "flex-end", gap: 10, marginTop: 6 }}>
+              <Btn variant="outline" type="button" onClick={() => setConnect(null)}>
+                Cancel
+              </Btn>
+              <Btn
+                variant="primary"
+                type="submit"
+                loading={connectingYt}
+                icon="check"
+                style={{ background: "#FF0000", borderColor: "#FF0000" }}
+              >
+                Verify & Connect Channel
+              </Btn>
+            </div>
+          </form>
         ) : (connect?.key === "facebook" || connect?.key === "instagram") ? (
           <div style={{ display: "grid", gap: 16 }}>
             <div className="row" style={{ gap: 14, alignItems: "center", padding: "14px 16px", background: "var(--sa-bg)", borderRadius: 14, border: "1px solid var(--sa-border)" }}>
@@ -389,7 +549,7 @@ export default function SocialAccounts() {
             </p>
           </div>
         ) : (
-          <div className="sa-empty" style={{ padding: 10 }}><PlatformIcon platform={connect?.key} size={52} /><h4>OAuth for {connect?.name} is coming soon</h4><p>The backend supports Instagram and Facebook today. We'll notify you when {connect?.name} publishing is ready.</p><Btn onClick={() => { toast(`We'll let you know when ${connect?.name} is ready`, "success"); setConnect(null); }}>Notify me</Btn></div>
+          <div className="sa-empty" style={{ padding: 10 }}><PlatformIcon platform={connect?.key} size={52} /><h4>OAuth for {connect?.name} is coming soon</h4><p>The backend supports Instagram, Facebook, and YouTube today. We'll notify you when {connect?.name} publishing is ready.</p><Btn onClick={() => { toast(`We'll let you know when ${connect?.name} is ready`, "success"); setConnect(null); }}>Notify me</Btn></div>
         )}
       </Modal>
     </>

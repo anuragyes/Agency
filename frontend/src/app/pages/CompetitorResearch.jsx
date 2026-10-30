@@ -34,7 +34,9 @@ const STEPS = [
 ];
 const FALLBACK_PLATFORMS = [
   { id: "instagram", name: "Instagram", implemented: true, searchHint: "Exact Instagram username of a Business or Creator account", metrics: [], notAvailable: [] },
-  ...[["youtube", "YouTube"], ["x", "X"], ["threads", "Threads"], ["pinterest", "Pinterest"], ["tiktok", "TikTok"], ["facebook", "Facebook"], ["linkedin", "LinkedIn"]]
+  { id: "youtube", name: "YouTube", implemented: true, searchHint: "YouTube handle (@channel), channel name, URL or Channel ID", metrics: [], notAvailable: [] },
+  { id: "facebook", name: "Facebook", implemented: true, searchHint: "Facebook Page username, Page id or link, e.g. amul.coop or facebook.com/amul.coop", metrics: [], notAvailable: [] },
+  ...[["x", "X"], ["threads", "Threads"], ["pinterest", "Pinterest"], ["tiktok", "TikTok"], ["linkedin", "LinkedIn"]]
     .map(([id, name]) => ({ id, name, implemented: false, notes: [] })),
 ];
 const STATUS = { running: ["blue", "Running"], completed: ["green", "Completed"], partial: ["amber", "Partial"], failed: ["red", "Failed"] };
@@ -48,7 +50,7 @@ function ProfileCard({ c, action }) {
       {c.profilePictureUrl ? <img className="sa-profile-pic" src={c.profilePictureUrl} alt="" referrerPolicy="no-referrer" /> : <span className="sa-profile-pic" />}
       <span className="grow" style={{ minWidth: 0 }}>
         <b>@{c.username}</b> {c.name && <span className="muted">· {c.name}</span>}
-        <small style={{ display: "block" }}>{fmt(c.followers)} followers · {fmt(c.mediaCount)} posts{c.engagementRate != null && <> · {c.engagementRate}% engagement</>}</small>
+        <small style={{ display: "block" }}>{fmt(c.followers)} {c.totalViews != null ? "subscribers" : "followers"} · {fmt(c.mediaCount)} {c.totalViews != null ? "videos" : "posts"}{c.totalViews != null && <> · {fmt(c.totalViews)} views</>}{c.engagementRate != null && <> · {c.engagementRate}% engagement</>}</small>
         {c.biography && <small className="faint" style={{ display: "block", marginTop: 4 }}>{c.biography.slice(0, 160)}</small>}
         {c.recentPosts?.length > 0 && (
           <span className="row mt-s" style={{ gap: 6 }}>
@@ -190,7 +192,7 @@ export default function CompetitorResearch() {
     if (!pid) { toast("Train your Brand Brain first", "error"); return; }
     setRunning(true);
     try {
-      const r = await startIntelPipeline({ productId: pid, competitors: selected.map((s) => s.username), prompt, useAI, method });
+      const r = await startIntelPipeline({ productId: pid, platform, competitors: selected.map((s) => s.username), prompt, useAI, method });
       setReport(null); setIdeaSel(new Set()); setCreating({});
       setLive({ id: r._id, status: "running", pipeline: r.pipeline });
       setStep(2);
@@ -314,9 +316,9 @@ export default function CompetitorResearch() {
                   <DiscoveryPanel productId={pid} profile={profile} selected={selected} max={maxCompetitors} onAdd={addCompetitor} onAddMany={addMany} />
                 ) : <>
                   <div className="sa-prompt row mt" style={{ padding: "10px 10px 10px 18px" }}>
-                    <Icon name="at" size={19} style={{ color: "var(--sa-primary)" }} />
+                    <Icon name={platform === "youtube" ? "video" : "at"} size={19} style={{ color: "var(--sa-primary)" }} />
                     <input className="grow" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lookup()}
-                      placeholder="Competitor username or URL, e.g. bluetokaicoffee or instagram.com/bluetokaicoffee" aria-label="Competitor username"
+                      placeholder={platform === "youtube" ? "YouTube channel handle or URL, e.g. @mkbhd, @mrbeast, or youtube.com/@amul_india" : "Competitor username or URL, e.g. bluetokaicoffee or instagram.com/bluetokaicoffee"} aria-label="Competitor username"
                       style={{ border: 0, outline: 0, fontSize: 16, height: 42, background: "none" }} />
                     <Btn variant="grad" icon="search" onClick={lookup} loading={lookupBusy}>Search</Btn>
                   </div>
@@ -335,11 +337,11 @@ export default function CompetitorResearch() {
                     </div>
                   )}
 
-                  {platform === "instagram" && (
+                  {(platform === "instagram" || platform === "youtube") && (
                     <details className="mt" open={bulkRows.length > 0}>
-                      <summary className="small strong" style={{ cursor: "pointer" }}>Add many at once — paste usernames or profile URLs (one per line, up to {maxCompetitors})</summary>
+                      <summary className="small strong" style={{ cursor: "pointer" }}>Add many at once — paste {platform === "youtube" ? "channel handles or URLs" : "usernames or profile URLs"} (one per line, up to {maxCompetitors})</summary>
                       <textarea className="sa-input mt-s" rows={4} value={bulk} onChange={(e) => setBulk(e.target.value)} style={{ height: "auto", padding: 12, lineHeight: 1.6, width: "100%" }}
-                        placeholder={"@competitor_coffee_1\nhttps://www.instagram.com/competitor_coffee_2/\ncompetitor_coffee_3"} aria-label="Usernames or URLs" />
+                        placeholder={platform === "youtube" ? "@mkbhd\nhttps://www.youtube.com/@mrbeast\n@veritasium" : "@competitor_coffee_1\nhttps://www.instagram.com/competitor_coffee_2/\ncompetitor_coffee_3"} aria-label="Usernames or URLs" />
                       <div className="row mt-s" style={{ gap: 8, justifyContent: "flex-end" }}>
                         {bulkRows.some((r) => r.status === "ok") && <Btn icon="userPlus" onClick={() => addMany(bulkRows.filter((r) => r.status === "ok").map((r) => r.data))}>Add {bulkRows.filter((r) => r.status === "ok").length} valid</Btn>}
                         <Btn variant="primary" icon="shieldCheck" loading={bulkBusy} onClick={validateBulk} disabled={!bulk.trim()}>Validate profiles</Btn>
