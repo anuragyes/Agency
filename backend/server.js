@@ -40,6 +40,8 @@ const imageGenRouter = require("./routes/imageGenRoutes.js");
 const inboxRouter = require("./routes/inboxRoutes.js");
 const authRouter = require("./routes/authRoutes.js");
 const userAuthRouter = require("./routes/userAuthRoutes.js");
+const youtubeRouter = require("./routes/youtubeRoutes.js");
+const trendsRouter = require("./routes/trendsRoutes.js");
 const { optionalAuth } = require("./middleware/authMiddleware.js");
 
 const PORT = process.env.PORT || 5000;
@@ -59,7 +61,8 @@ app.use("/api", optionalAuth);
 app.use("/api/user", userAuthRouter);                                     // User Authentication: Signup, Login, Google OAuth
 app.use("/api/products", productRouter);                           // Phase 1: Product Profile
 app.use("/api/market-research", marketResearchRouter);             // Phase 2: Market Research (5 platforms + aggregator)
-app.use("/api/content", contentRouter);                            // Studio step 1: prompt + platform -> compact brief
+app.use("/api/content", contentRouter);
+// Studio step 1: prompt + platform -> compact brief
 app.use("/api/instagram", instagramResearchRoutes);               // Instagram: research -> post/reel/carousel -> review -> publish
 app.use("/api/facebook", facebookRouter);                          // Facebook Page: research -> text/photo/album/reel -> review -> publish
 app.use("/api/image-gen", imageGenRouter);                       // AI product ad image: layout -> approve -> SD + ControlNet -> typography + logo
@@ -67,6 +70,8 @@ app.use("/api/hashtags", hashtagRouter);
 app.use("/api/competitor-research", competitorResearchRouter);         // Competitor research: real data + grounded AI report                           // Real hashtags per platform (Instagram live, others ready)
 app.use("/api/inbox", inboxRouter);                                   // Unified Inbox: Webhooks -> Filter -> Queue -> AI -> Socket.IO
 app.use("/api/auth", authRouter);                                     // Multi-tenant OAuth: Meta (Instagram & Facebook), YouTube, X
+app.use("/api/youtube", youtubeRouter);                               // YouTube Channel: profile, stats, videos, and channel connection
+app.use("/api/trends", trendsRouter);                                 // Google Trends interest for project-specific topics
 
 // STEP 7: 404 for unknown routes (instead of Express' default HTML page)
 app.use((req, res) => {

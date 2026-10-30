@@ -30,7 +30,18 @@ const { runResults } = require("./agents/resultsAgent.js");
 const { buildCodeReport } = require("./codeReport.js");
 
 const badRequest = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
-const cleanUsername = (u) => String(u || "").trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/[/?#].*$/, "").replace(/^@/, "").toLowerCase();
+const cleanUsername = (u) => {
+    const raw = String(u || "").trim();
+    if (!raw) return "";
+    if (raw.includes("youtube.com") || raw.includes("youtu.be")) {
+        const channelId = raw.match(/UC[a-zA-Z0-9_-]{22}/);
+        if (channelId) return channelId[0];
+        const handle = raw.match(/@([a-zA-Z0-9._-]+)/);
+        if (handle) return `@${handle[1]}`;
+        return raw;
+    }
+    return raw.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/[/?#].*$/, "").replace(/^@/, "").toLowerCase();
+};
 const yieldLoop = () => new Promise((r) => setImmediate(r));
 
 /** run fn over items with a small concurrency pool */
@@ -48,7 +59,7 @@ const slimPosts = ({ rows, ...rest }) => rest;
 // ───────── start ─────────
 const startPipeline = async ({ productId, competitors = [], prompt = "", useAI = true, method = "manual", platform = "instagram", userId } = {}) => {
     const provider = getProvider(platform);
-    if (provider.id !== "instagram") throw badRequest("The agent pipeline runs on Instagram data.");
+    if (!provider.implemented) throw badRequest(`${provider.name} competitor research is not connected yet.`);
     if (!mongoose.isValidObjectId(productId)) throw badRequest("Choose your product (Brand Brain) first.");
     const product = await Product.findById(productId).lean();
     if (!product) throw badRequest("Product not found", 404);
@@ -87,7 +98,7 @@ const runPipeline = async (reportId, { product, provider, usernames, prompt, use
             { competitors: usernames.length, useAI, keywords: (brand.keywords || []).length });
 
         // 1. Competitor Research Agents (one per brand, real Business Discovery API)
-        t.start("competitor_research", `Researching ${usernames.length} competitors on Instagram`);
+        t.start("competitor_research", `Researching ${usernames.length} competitors on ${provider.name}`);
         usernames.forEach((u) => t.child("competitor_research", u, { status: "queued" }));
         const rawAccounts = [], accounts = [], failed = [];
         let finished = 0;
@@ -144,8 +155,8 @@ const runPipeline = async (reportId, { product, provider, usernames, prompt, use
             if (r.note) notes.push(r.note);
         }
         notes.push(
-            "Data = each account's most recent posts (likes + comments) from the official Instagram Graph API, not their full history.",
-            "Instagram does not share shares, saves, reach or comment text for other accounts."
+            `Data = each account's most recent posts from the official ${provider.name} API, not their full history.`,
+            provider.dataNote || "Shares, saves, and private reach are not shared for other accounts."
         );
         t.done("data_collection", `${me ? `Your account: ${me.postsAnalyzed} posts` : "Your account: not available"} · ${ownComments.length} comments`, { yourPosts: me?.postsAnalyzed || 0, comments: ownComments.length });
 

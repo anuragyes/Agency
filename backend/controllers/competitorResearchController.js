@@ -15,9 +15,10 @@ module.exports = {
     // GET /:platform/lookup?username=amul_india  -> one real profile card
     lookup: wrap(async (req, res) => {
         const provider = getProvider(req.params.platform);
+        const username = req.params.platform === "instagram" ? intel.cleanUsername(req.query.username) : String(req.query.username || "").trim();
         res.json({
             success: true,
-            data: await provider.lookup(intel.cleanUsername(req.query.username), {
+            data: await provider.lookup(username, {
                 productId: req.query.productId,
                 userId: req.user?._id,
             }),

@@ -99,6 +99,16 @@ const getAccountCredentials = async ({ productId, userId, platform = "instagram"
                 accountId: process.env.META_PAGE_ID,
             };
         }
+
+        if (platform === "youtube" && process.env.YOUTUBE_API_KEY) {
+            return {
+                source: "env",
+                platform: "youtube",
+                accessToken: process.env.YOUTUBE_API_KEY,
+                accountId: process.env.YOUTUBE_CHANNEL_ID || process.env.YOUTUBE_CHANNEL_HANDLE,
+                username: process.env.YOUTUBE_CHANNEL_HANDLE,
+            };
+        }
     }
 
     return null;
