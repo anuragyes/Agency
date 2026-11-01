@@ -25,24 +25,34 @@ async function getProjectTrends({ terms, geo = "" } = {}) {
 
     const endTime = new Date();
     const startTime = new Date(endTime.getTime() - 365 * 24 * 60 * 60 * 1000);
-    const results = await Promise.all(keywords.map(async (keyword) => {
-        const raw = await googleTrends.interestOverTime({ keyword, startTime, endTime, geo: safeGeo, granularTimeResolution: true });
+    try {
+        // Compare the project terms in one request to reduce Google's request burst
+        // and keep their relative scores on the same scale.
+        const raw = await googleTrends.interestOverTime({ keyword: keywords, startTime, endTime, geo: safeGeo, granularTimeResolution: true });
         const rows = parse(raw)?.default?.timelineData || [];
-        const points = rows.map((row) => ({ date: row.formattedTime || row.time, value: Number(row.value?.[0] ?? row.value) || 0 }));
-        const values = points.map((point) => point.value);
-        return {
-            name: keyword,
-            cat: "Project research",
-            spark: values.slice(-12),
-            interest: values.length ? values[values.length - 1] : 0,
-            growth: growthPct(values),
-            points,
-        };
-    }));
-    results.sort((a, b) => (b.growth ?? -Infinity) - (a.growth ?? -Infinity));
-    const data = { source: "Google Trends", geo: safeGeo || "Worldwide", terms: results, fetchedAt: new Date().toISOString(), note: "Search interest is indexed from 0 to 100; it is not absolute search volume." };
-    cache.set(key, { at: Date.now(), data });
-    return data;
+        const results = keywords.map((keyword, index) => {
+            const points = rows.map((row) => ({
+                date: row.formattedTime || row.time,
+                value: Number(Array.isArray(row.value) ? row.value[index] : index === 0 ? row.value : 0) || 0,
+            }));
+            const values = points.map((point) => point.value);
+            return {
+                name: keyword,
+                cat: "Project research",
+                spark: values.slice(-12),
+                interest: values.length ? values[values.length - 1] : 0,
+                growth: growthPct(values),
+                points,
+            };
+        });
+        results.sort((a, b) => (b.growth ?? -Infinity) - (a.growth ?? -Infinity));
+        const data = { source: "Google Trends", geo: safeGeo || "Worldwide", terms: results, fetchedAt: new Date().toISOString(), note: "Search interest is indexed from 0 to 100; it is not absolute search volume." };
+        cache.set(key, { at: Date.now(), data });
+        return data;
+    } catch (error) {
+        if (cached) return { ...cached.data, stale: true };
+        throw error;
+    }
 }
 
 module.exports = { getProjectTrends, cleanTerms, growthPct };
