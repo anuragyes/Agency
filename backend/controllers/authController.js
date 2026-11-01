@@ -35,6 +35,7 @@ const connectMeta = (req, res) => {
         "pages_show_list",
         "pages_read_engagement",
         "pages_manage_posts",
+        "business_management",
     ].join(",");
 
     // Encode both productId and userId into state (base64url)
@@ -121,10 +122,68 @@ const handleMetaCallback = async (req, res) => {
         });
 
         let pages = pagesRes.data.data || [];
+        console.log(`[OAuth] /me/accounts returned ${pages.length} page(s):`, pages.map(p => ({ id: p.id, name: p.name, hasIg: !!p.instagram_business_account })));
 
         // Resilient fallback: If /me/accounts returns empty (common with Meta Business Suite & New Pages Experience)
         if (!pages.length) {
-            console.log("[OAuth] /me/accounts returned empty. Attempting direct lookup fallback...");
+            console.log("[OAuth] /me/accounts returned empty. Checking user permissions and Meta Business Portfolios...");
+
+            // Check permissions granted to detect if user declined pages_show_list
+            try {
+                const permRes = await axios.get(`${FB_GRAPH}/${version}/me/permissions`, {
+                    params: { access_token: longLivedToken },
+                    timeout: 8000,
+                });
+                const perms = permRes.data?.data || [];
+                console.log("[OAuth] User granted permissions:", perms.map(p => `${p.permission}: ${p.status}`).join(", "));
+            } catch (pErr) {
+                console.warn("[OAuth] Could not fetch permissions:", pErr.message);
+            }
+
+            // Attempt to discover pages via Meta Business Portfolio (Meta Business Suite)
+            try {
+                const bizRes = await axios.get(`${FB_GRAPH}/${version}/me/businesses`, {
+                    params: { access_token: longLivedToken },
+                    timeout: 10000,
+                });
+                const businesses = bizRes.data?.data || [];
+                console.log(`[OAuth] Discovered ${businesses.length} Business Portfolio(s). Inspecting owned pages...`);
+
+                for (const biz of businesses) {
+                    try {
+                        const bizPagesRes = await axios.get(`${FB_GRAPH}/${version}/${biz.id}/owned_pages`, {
+                            params: {
+                                access_token: longLivedToken,
+                                fields: "id,name,category,access_token,instagram_business_account{id,username,name,profile_picture_url}",
+                            },
+                            timeout: 10000,
+                        });
+                        const bPages = bizPagesRes.data?.data || [];
+                        if (bPages.length) {
+                            console.log(`[OAuth] Found ${bPages.length} owned page(s) in business ${biz.name} (${biz.id})`);
+                            pages.push(...bPages);
+                        }
+                    } catch {
+                        try {
+                            const clientPagesRes = await axios.get(`${FB_GRAPH}/${version}/${biz.id}/client_pages`, {
+                                params: {
+                                    access_token: longLivedToken,
+                                    fields: "id,name,category,access_token,instagram_business_account{id,username,name,profile_picture_url}",
+                                },
+                                timeout: 10000,
+                            });
+                            const cPages = clientPagesRes.data?.data || [];
+                            if (cPages.length) {
+                                console.log(`[OAuth] Found ${cPages.length} client page(s) in business ${biz.name} (${biz.id})`);
+                                pages.push(...cPages);
+                            }
+                        } catch { }
+                    }
+                }
+            } catch (bizErr) {
+                console.warn("[OAuth] Business portfolio search skipped:", bizErr.response?.data?.error?.message || bizErr.message);
+            }
+
             const fallbackPageId = process.env.META_PAGE_ID || process.env.FACEBOOK_PAGE_ID || process.env.INSTAGRAM_PAGE_ID;
             if (fallbackPageId) {
                 try {
