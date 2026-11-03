@@ -65,6 +65,19 @@ import {
   uploadFacebookMedia,
 } from "../api/facebookApi";
 import {
+  approveYouTubePost,
+  generateYouTubePost,
+  getYouTubePost,
+  listYouTubePosts,
+  publishYouTubePost,
+  scheduleYouTubePost,
+  unscheduleYouTubePost,
+  reviseYouTubePost,
+  testYouTube,
+  updateYouTubePost,
+  uploadYouTubeMedia,
+} from "../api/youtubeApi";
+import {
   approveCompetitorReport,
   getCompetitorReport,
   linkReportPost,
@@ -199,7 +212,7 @@ export const testInstagram = () => call("/api/instagram/test").then((r) => r.dat
 // Same list as backend/ai/contentBrief/PlatformBriefSpecs.js (live = researcher + publish backend exists)
 export const STUDIO_PLATFORMS = [
   { key: "instagram", label: "Instagram", formats: ["carousel", "image", "reel"], live: true },
-  { key: "youtube", label: "YouTube", formats: ["short", "video"], live: false },
+  { key: "youtube", label: "YouTube", formats: ["short", "video"], live: true },
   { key: "facebook", label: "Facebook", formats: ["text", "image", "carousel", "reel"], live: true },
   { key: "linkedin", label: "LinkedIn", formats: ["post", "carousel", "article"], live: false },
   { key: "x", label: "X", formats: ["post", "thread"], live: false },
@@ -267,6 +280,18 @@ const POST_APIS = {
     unschedulePost: unscheduleFacebookPost,
     uploadMedia: uploadFacebookMedia,
     listPosts: listFacebookPosts,
+  },
+  youtube: {
+    generatePost: generateYouTubePost,
+    getPost: getYouTubePost,
+    updatePost: updateYouTubePost,
+    revisePost: reviseYouTubePost,
+    approvePost: approveYouTubePost,
+    publishPost: publishYouTubePost,
+    schedulePost: scheduleYouTubePost,
+    unschedulePost: unscheduleYouTubePost,
+    uploadMedia: uploadYouTubeMedia,
+    listPosts: listYouTubePosts,
   },
 };
 export const POST_PLATFORMS = Object.keys(POST_APIS);

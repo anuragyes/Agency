@@ -11,7 +11,7 @@ const AdImageSchema = new mongoose.Schema(
     {
         productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", index: true },
         postId: { type: mongoose.Schema.Types.ObjectId, index: true }, // the draft it was made for (optional)
-        platform: { type: String, enum: ["instagram", "facebook", null], default: null },
+        platform: { type: String, enum: ["instagram", "facebook", "youtube", null], default: null },
         batchId: { type: String, index: true },     // one prompt -> up to 4 photos in different styles share a batchId
         style: { type: String },                     // style of this photo in its batch ("Clean studio", "Lifestyle"...)
 

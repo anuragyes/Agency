@@ -33,7 +33,8 @@ import { API_BASE } from "../../api/productApi";
 const ASPECTS = [
   { value: "1:1", label: "1:1 Square" },
   { value: "4:5", label: "4:5 Portrait" },
-  { value: "9:16", label: "9:16 Story / Reel" },
+  { value: "9:16", label: "9:16 Story / Reel / Short" },
+  { value: "16:9", label: "16:9 YouTube Video" },
 ];
 const MAX_IMAGES = 4;
 const COUNTS = [1, 2, 3, 4].map((n) => ({ value: n, label: `${n}` }));
@@ -66,7 +67,15 @@ const MARK = { name: "logo", upload: uploadProductLogo, remove: removeProductLog
 /** product / job -> the brand mark in use (an icon uploaded before the icon option was removed still counts as the logo) */
 const assetsOf = (src = {}, photoUrl) => ({ logoUrl: src.logoUrl || src.iconUrl || null, photoUrl: photoUrl ?? (src.photoUrl || null) });
 
-const defaultAspect = (post) => (post?.contentType === "reel" ? "9:16" : ["1:1", "4:5", "9:16"].includes(post?.content?.visual?.aspectRatio) ? post.content.visual.aspectRatio : "4:5");
+const defaultAspect = (post) => (
+  post?.contentType === "reel" || post?.contentType === "short"
+    ? "9:16"
+    : post?.contentType === "video"
+    ? "16:9"
+    : ["1:1", "4:5", "9:16", "16:9"].includes(post?.content?.visual?.aspectRatio)
+    ? post.content.visual.aspectRatio
+    : "4:5"
+);
 const defaultPrompt = (post, productName) => {
   const v = post?.content?.visual;
   return [v?.brief, v?.style].filter(Boolean).join(". ") || (productName ? `A premium photo of ${productName}` : "");

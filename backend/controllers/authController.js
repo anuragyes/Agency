@@ -262,7 +262,7 @@ const handleMetaCallback = async (req, res) => {
                         metadata: { category: page.category },
                         status: "connected",
                     },
-                    { upsert: true, new: true }
+                    { upsert: true, returnDocument: "after" }
                 );
                 connectedCount++;
             }
@@ -294,7 +294,7 @@ const handleMetaCallback = async (req, res) => {
                         }),
                         status: "connected",
                     },
-                    { upsert: true, new: true }
+                    { upsert: true, returnDocument: "after" }
                 );
                 connectedCount++;
             }
@@ -359,7 +359,7 @@ const disconnectAccount = async (req, res, next) => {
         const filter = { _id: id };
         if (userId) filter.userId = userId;
 
-        const updated = await SocialAccount.findOneAndUpdate(filter, { status: "revoked" }, { new: true });
+        const updated = await SocialAccount.findOneAndUpdate(filter, { status: "revoked" }, { returnDocument: "after" });
         if (!updated) return res.status(404).json({ success: false, message: "Account not found or access denied" });
         return res.json({ success: true, message: "Account disconnected successfully" });
     } catch (err) {
@@ -367,9 +367,173 @@ const disconnectAccount = async (req, res, next) => {
     }
 };
 
+/**
+ * GET /api/auth/youtube/connect
+ * Starts Google OAuth 2.0 flow with YouTube video upload and channel management permissions.
+ */
+const connectYouTube = async (req, res) => {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const productId = req.query.productId || "";
+    const userId = req.user?._id?.toString() || "";
+
+    if (!clientId) {
+        return res.status(500).json({ success: false, message: "GOOGLE_CLIENT_ID is missing in .env" });
+    }
+
+    const redirectUri = `${getBackendUrl()}/api/auth/youtube/callback`;
+    const scopes = [
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "https://www.googleapis.com/auth/userinfo.email",
+    ].join(" ");
+
+    const state = Buffer.from(JSON.stringify({ productId, userId })).toString("base64url");
+
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
+        clientId
+    )}&redirect_uri=${encodeURIComponent(
+        redirectUri
+    )}&response_type=code&scope=${encodeURIComponent(
+        scopes
+    )}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
+
+    if (req.headers.accept?.includes("application/json")) {
+        return res.json({ success: true, authUrl });
+    }
+    return res.redirect(authUrl);
+};
+
+/**
+ * GET /api/auth/youtube/callback
+ * Handles Google OAuth redirect, exchanges code for access & refresh tokens,
+ * fetches the authenticated user's YouTube Channel and persists it to SocialAccount.
+ */
+const handleYouTubeCallback = async (req, res) => {
+    const { code, state: rawState, error } = req.query;
+    const frontendUrl = getFrontendUrl();
+
+    if (error || !code) {
+        const msg = error || "Google authorization was cancelled or denied";
+        console.warn("[YouTube OAuth] Callback error:", msg);
+        return res.redirect(`${frontendUrl}/app/accounts?error=${encodeURIComponent(msg)}`);
+    }
+
+    let targetProductId = undefined;
+    let targetUserId = undefined;
+
+    if (rawState) {
+        try {
+            const decoded = JSON.parse(Buffer.from(rawState, "base64url").toString("utf8"));
+            if (decoded.productId && mongoose.isValidObjectId(decoded.productId)) {
+                targetProductId = decoded.productId;
+            }
+            if (decoded.userId && mongoose.isValidObjectId(decoded.userId)) {
+                targetUserId = decoded.userId;
+            }
+        } catch {
+            if (mongoose.isValidObjectId(rawState)) targetProductId = rawState;
+        }
+    }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectUri = `${getBackendUrl()}/api/auth/youtube/callback`;
+
+    try {
+        const tokenParams = {
+            code,
+            client_id: clientId,
+            redirect_uri: redirectUri,
+            grant_type: "authorization_code",
+        };
+        if (clientSecret) {
+            tokenParams.client_secret = clientSecret;
+        }
+
+        const tokenRes = await axios.post(
+            "https://oauth2.googleapis.com/token",
+            new URLSearchParams(tokenParams).toString(),
+            {
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                timeout: 15000,
+            }
+        );
+
+        const { access_token, refresh_token, expires_in } = tokenRes.data;
+        const tokenExpiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : null;
+
+        // Fetch channel info
+        const channelRes = await axios.get("https://www.googleapis.com/youtube/v3/channels", {
+            params: {
+                part: "snippet,statistics",
+                mine: true,
+            },
+            headers: {
+                Authorization: `Bearer ${access_token}`,
+            },
+            timeout: 15000,
+        });
+
+        const channels = channelRes.data?.items || [];
+        if (!channels.length) {
+            return res.redirect(
+                `${frontendUrl}/app/accounts?error=${encodeURIComponent(
+                    "No YouTube channel found for this Google account. Please create a channel first at youtube.com."
+                )}`
+            );
+        }
+
+        const channel = channels[0];
+        const matchQuery = {
+            platform: "youtube",
+            accountId: channel.id,
+        };
+        if (targetUserId) matchQuery.userId = targetUserId;
+
+        await SocialAccount.findOneAndUpdate(
+            matchQuery,
+            {
+                ...(targetUserId && { userId: targetUserId }),
+                ...(targetProductId && { productId: targetProductId }),
+                platform: "youtube",
+                accountId: channel.id,
+                name: channel.snippet?.title || "My YouTube Channel",
+                username: channel.snippet?.customUrl || channel.snippet?.title || channel.id,
+                profilePictureUrl: channel.snippet?.thumbnails?.default?.url || null,
+                accessToken: access_token,
+                refreshToken: refresh_token || null,
+                tokenExpiresAt,
+                metadata: {
+                    subscribers: channel.statistics?.subscriberCount,
+                    videoCount: channel.statistics?.videoCount,
+                    viewCount: channel.statistics?.viewCount,
+                },
+                status: "connected",
+            },
+            { upsert: true, returnDocument: "after" }
+        );
+
+        console.log(`[YouTube OAuth] Successfully connected channel "${channel.snippet?.title}" (${channel.id})`);
+        return res.redirect(
+            `${frontendUrl}/app/accounts?connected=youtube&channel=${encodeURIComponent(channel.snippet?.title || "")}`
+        );
+    } catch (err) {
+        const errorMsg =
+            err.response?.data?.error_description ||
+            err.response?.data?.error?.message ||
+            err.message ||
+            "Failed to complete YouTube OAuth connection";
+        console.error("[YouTube OAuth] Error:", errorMsg);
+        return res.redirect(`${frontendUrl}/app/accounts?error=${encodeURIComponent(errorMsg)}`);
+    }
+};
+
 module.exports = {
     connectMeta,
     handleMetaCallback,
+    connectYouTube,
+    handleYouTubeCallback,
     listConnectedAccounts,
     disconnectAccount,
 };

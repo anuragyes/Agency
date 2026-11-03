@@ -25,12 +25,17 @@ export default function SocialAccounts() {
   const [accts, setAccts] = useState(ACCOUNTS);
   const [ig, setIg] = useState({ state: "loading" });
   const [connect, setConnect] = useState(null);
+  const [switchAccount, setSwitchAccount] = useState(false);
   const [fb, setFb] = useState({ state: "loading" });
   const [yt, setYt] = useState({ state: "loading" });
   const [ytChannelInput, setYtChannelInput] = useState("");
   const [connectingYt, setConnectingYt] = useState(false);
   const [oauthAccounts, setOauthAccounts] = useState([]);
   const [loadingOAuth, setLoadingOAuth] = useState(false);
+
+  useEffect(() => {
+    setSwitchAccount(false);
+  }, [connect]);
 
   const loadOauthAccounts = async () => {
     setLoadingOAuth(true);
@@ -44,23 +49,92 @@ export default function SocialAccounts() {
     }
   };
 
-  const handleDisconnect = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to disconnect ${name || "this account"}?`)) return;
+  const handleRemoveAccount = async (account) => {
+    const targetPlatform = account?.platform || connect?.key;
+    const accountName = account?.name || account?.username || targetPlatform || "this account";
+    if (!window.confirm(`Are you sure you want to remove and disconnect ${accountName}?`)) return;
+
     try {
-      await disconnectAccount(id);
-      toast(`Disconnected ${name || "account"} successfully`, "success");
-      loadOauthAccounts();
+      if (account?._id) {
+        await disconnectAccount(account._id);
+      }
+      if (targetPlatform === "youtube") {
+        try {
+          await disconnectYoutubeChannel(current?._id);
+        } catch (e) {
+          console.warn("YouTube channel disconnect error:", e);
+        }
+      }
+      toast(`Disconnected ${accountName} successfully`, "success");
+      setConnect(null);
+      await checkAll();
     } catch (err) {
       toast(`Failed to disconnect: ${err.message}`, "error");
     }
   };
 
-  // Handle returning from OAuth callback (?connected=meta or ?error=...)
+  const handleDisconnect = async (id, name) => {
+    const matchingAcc = oauthAccounts.find((o) => o._id === id);
+    return handleRemoveAccount(matchingAcc || { _id: id, name });
+  };
+
+  const getConnectedListForPlatform = (key) => {
+    if (!key || key === "pick") return [];
+    const list = oauthAccounts.filter((o) => o.platform === key && o.status === "connected");
+    if (list.length > 0) return list;
+    if (key === "youtube" && (yt.state === "ok" || yt.data)) {
+      return [{
+        _id: yt.account?._id,
+        platform: "youtube",
+        name: yt.data?.profile?.name || yt.account?.name || "YouTube Channel",
+        username: yt.data?.profile?.username || yt.account?.username || "",
+        profilePictureUrl: yt.data?.profile?.profilePictureUrl || null,
+        metadata: {
+          subscribers: yt.data?.profile?.followers,
+          videoCount: yt.data?.profile?.mediaCount,
+          totalViews: yt.data?.profile?.totalViews,
+        },
+      }];
+    }
+    if (key === "instagram" && ig.state === "ok" && ig.data) {
+      return [{
+        platform: "instagram",
+        name: ig.data?.profile?.name || (ig.user ? `@${ig.user}` : "Instagram Business"),
+        username: ig.user || "",
+        profilePictureUrl: ig.data?.profile?.profilePictureUrl || null,
+        metadata: {
+          followers: ig.data?.profile?.followers,
+          mediaCount: ig.data?.profile?.mediaCount,
+        },
+      }];
+    }
+    if (key === "facebook" && fb.state === "ok" && fb.data) {
+      return [{
+        platform: "facebook",
+        name: fb.data?.profile?.name || "Facebook Page",
+        username: fb.data?.profile?.username || "",
+        profilePictureUrl: fb.data?.profile?.profilePictureUrl || null,
+        metadata: {
+          followers: fb.data?.profile?.followers,
+          pageLikes: fb.data?.profile?.pageLikes,
+        },
+      }];
+    }
+    return [];
+  };
+
+  // Handle returning from OAuth callback (?connected=meta or ?connected=youtube or ?error=...)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("connected") === "meta") {
       toast("Successfully connected your Meta accounts!", "success");
       loadOauthAccounts();
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get("connected") === "youtube") {
+      const channel = params.get("channel");
+      toast(channel ? `Successfully connected YouTube channel "${channel}" via Google OAuth!` : "Successfully connected YouTube channel via Google OAuth!", "success");
+      loadOauthAccounts();
+      checkYt();
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (params.get("error")) {
       const raw = params.get("error");
@@ -176,10 +250,13 @@ export default function SocialAccounts() {
   const shown = view.filter((a) => filter === "all" || (filter === "connected" && a.status === "connected") || (filter === "attention" && a.status === "reconnect") || (filter === "available" && a.status === "available"));
   const setAuto = (key, v) => setAccts((l) => l.map((a) => (a.key === key ? { ...a, autopilot: v } : a)));
 
+  const activeConnectedList = connect && connect !== "pick" ? getConnectedListForPlatform(connect.key) : [];
+  const isAlreadyAuthenticated = activeConnectedList.length > 0;
+
   return (
     <>
       <PageHeader title="Social accounts" sub="Connect and manage every channel Sociva can publish to and listen on.">
-        <Btn icon="refresh" onClick={() => { checkAll(); toast("Syncing all channels…"); }}>Sync all</Btn>
+
         <Btn variant="primary" icon="plus" onClick={() => setConnect("pick")}>Connect account</Btn>
       </PageHeader>
 
@@ -217,227 +294,23 @@ export default function SocialAccounts() {
               <span className="row"><Toggle checked={a.autopilot} onChange={(v) => setAuto(a.key, v)} label={`${a.name} autopilot`} /><b className="strong">{a.autopilot ? "Autopilot" : "Approval mode"}</b></span>
               <Sparkline data={a.spark} color={a.status === "reconnect" ? "#f59e0b" : "#10b981"} width={150} height={40} />
             </div>
+            <div className="row between mt" style={{ borderTop: "1px solid var(--sa-border)", paddingTop: 10 }}>
+              <button
+                type="button"
+                className="sa-link small muted"
+                style={{ background: "none", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, padding: 0 }}
+                onClick={() => setConnect(a)}
+              >
+                <Icon name="link" size={13} /> Manage / Remove Account
+              </button>
+            </div>
             {a.live && liveOf[a.key]?.state === "error" && <p className="small red" style={{ marginBottom: 0 }}>{liveOf[a.key].msg} {ENV_HINT[a.key]} <button type="button" className="sa-link" onClick={a.key === "facebook" ? checkFb : check}>Retry</button></p>}
             {!a.live && <div style={{ marginTop: 10 }}><DemoTag title="Stats are sample data until this channel's API is connected" /></div>}
           </div>
         ))}
       </div>
 
-      {oauthAccounts.length > 0 && (
-        <Card
-          className="mt"
-          title={
-            <span className="row" style={{ gap: 10, alignItems: "center" }}>
-              Connected Accounts <LiveTag>Meta OAuth 2.0</LiveTag>
-            </span>
-          }
-          sub="Accounts authenticated via Meta Login for Business with 60-day auto-refreshing access tokens."
-          action={
-            <Btn size="sm" icon="refresh" onClick={loadOauthAccounts}>
-              Refresh
-            </Btn>
-          }
-        >
-          <div style={{ display: "grid", gap: 12 }}>
-            {oauthAccounts.map((acc) => (
-              <div
-                key={acc._id}
-                className="row between wrap"
-                style={{
-                  padding: "12px 16px",
-                  background: "var(--sa-bg)",
-                  borderRadius: 12,
-                  border: "1px solid var(--sa-border)",
-                  alignItems: "center",
-                }}
-              >
-                <div className="row" style={{ gap: 12, alignItems: "center" }}>
-                  {acc.profilePictureUrl ? (
-                    <img
-                      src={acc.profilePictureUrl}
-                      alt=""
-                      style={{ width: 44, height: 44, borderRadius: 22, objectFit: "cover" }}
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <PlatformIcon platform={acc.platform} size={44} radius={12} />
-                  )}
-                  <div>
-                    <div className="row" style={{ gap: 8, alignItems: "center" }}>
-                      <b className="strong" style={{ fontSize: 16 }}>
-                        {acc.name || acc.username || acc.accountId}
-                      </b>
-                      <Pill tone="green" icon="checkCircle">
-                        OAuth Active
-                      </Pill>
-                    </div>
-                    <div className="small muted">
-                      {acc.platform === "instagram" ? `@${acc.username}` : `Facebook Page ID: ${acc.accountId}`}
-                      {acc.parentAccountName ? ` · via Page "${acc.parentAccountName}"` : ""}
-                      {acc.tokenExpiresAt ? ` · Token valid until ${new Date(acc.tokenExpiresAt).toLocaleDateString()}` : ""}
-                    </div>
-                  </div>
-                </div>
-                <div className="row" style={{ gap: 10 }}>
-                  <Btn
-                    size="sm"
-                    variant="outline"
-                    style={{ color: "var(--sa-red, #ef4444)", borderColor: "rgba(239, 68, 68, 0.3)" }}
-                    onClick={() => handleDisconnect(acc._id, acc.name || acc.username)}
-                  >
-                    Disconnect
-                  </Btn>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
 
-      {live && (
-        <Card className="mt" title={<span className="row" style={{ gap: 10 }}>Instagram — live overview <LiveTag>Graph API</LiveTag></span>}
-          sub={`Real data from your connected account · updated ${timeAgo(live.fetchedAt)}`}
-          action={<Btn size="sm" icon="refresh" onClick={check}>Refresh</Btn>}>
-          <div className="row">
-            {live.profile.profilePictureUrl ? <img className="sa-profile-pic" src={live.profile.profilePictureUrl} alt="" referrerPolicy="no-referrer" /> : <PlatformIcon platform="instagram" size={52} radius={26} />}
-            <div className="grow">
-              <b className="strong" style={{ fontSize: 17 }}>@{live.profile.username}</b> {live.profile.accountType && <Pill tone="gray">{live.profile.accountType}</Pill>}
-              <div className="small muted">{live.profile.name}{live.profile.biography ? ` · ${live.profile.biography}` : ""}</div>
-            </div>
-            <a className="sa-link" href={`https://www.instagram.com/${live.profile.username}/`} target="_blank" rel="noreferrer">Open profile <Icon name="arrowUpRight" size={14} /></a>
-          </div>
-          <div className="sa-grid g-6 mt">
-            {[
-              ["Followers", fmt(live.profile.followers)],
-              ["Following", fmt(live.profile.following)],
-              ["Posts", fmt(live.profile.mediaCount)],
-              ["Avg likes", fmt(igStats.avgLikes)],
-              ["Avg comments", fmt(igStats.avgComments)],
-              ["Eng. rate", igStats.engagementRate != null ? `${igStats.engagementRate}%` : "—"],
-            ].map(([k, v]) => <div key={k} className="sa-kv" style={{ gridTemplateColumns: "1fr" }}><div><span>{k}</span><b>{v}</b></div></div>)}
-          </div>
-          <p className="small faint">Engagement rate = average (likes + comments) per post ÷ followers, from your last {igStats.postsAnalyzed} posts.</p>
-          {live.errors?.media && <p className="small red">Posts could not be loaded: {live.errors.media}</p>}
-
-          {igStats.topHashtags.length > 0 && (
-            <>
-              <h4 style={{ margin: "18px 0 8px" }}>Hashtags you use (and how those posts performed)</h4>
-              <div className="row wrap" style={{ gap: 8 }}>
-                {igStats.topHashtags.slice(0, 20).map((h) => (
-                  <span key={h.hashtag} className="sa-igtag" title={`${h.posts} posts · avg ${h.avgEngagement ?? "—"} likes+comments`}>{h.hashtag} <span className="faint">· {h.posts} · {fmt(h.avgEngagement)}</span></span>
-                ))}
-              </div>
-            </>
-          )}
-
-          {live.recentPosts.length > 0 && (
-            <>
-              <h4 style={{ margin: "18px 0 8px" }}>Recent posts</h4>
-              <div className="sa-igposts">
-                {live.recentPosts.slice(0, 8).map((p) => <IgPostCard key={p.id} post={p} />)}
-              </div>
-            </>
-          )}
-        </Card>
-      )}
-
-
-      {fbLive && (
-        <Card className="mt" title={<span className="row" style={{ gap: 10 }}>Facebook Page — live overview <LiveTag>Graph API</LiveTag></span>}
-          sub={`Real data from your connected Page · updated ${timeAgo(fbLive.fetchedAt)}`}
-          action={<Btn size="sm" icon="refresh" onClick={checkFb}>Refresh</Btn>}>
-          <div className="row">
-            {fbLive.profile.profilePictureUrl ? <img className="sa-profile-pic" src={fbLive.profile.profilePictureUrl} alt="" referrerPolicy="no-referrer" /> : <PlatformIcon platform="facebook" size={52} radius={26} />}
-            <div className="grow">
-              <b className="strong" style={{ fontSize: 17 }}>{fbLive.profile.name}</b> {fbLive.profile.category && <Pill tone="gray">{fbLive.profile.category}</Pill>}
-              <div className="small muted">{fbLive.profile.biography || (fbLive.profile.username ? `@${fbLive.profile.username}` : "")}</div>
-            </div>
-            {fbLive.profile.link && <a className="sa-link" href={fbLive.profile.link} target="_blank" rel="noreferrer">Open Page <Icon name="arrowUpRight" size={14} /></a>}
-          </div>
-          <div className="sa-grid g-6 mt">
-            {[
-              ["Followers", fmt(fbLive.profile.followers)],
-              ["Page likes", fmt(fbLive.profile.pageLikes)],
-              ["Avg reactions", fmt(fbStats.avgLikes)],
-              ["Avg comments", fmt(fbStats.avgComments)],
-              ["Avg shares", fmt(fbStats.avgShares)],
-              ["Eng. rate", fbStats.engagementRate != null ? `${fbStats.engagementRate}%` : "—"],
-            ].map(([k, v]) => <div key={k} className="sa-kv" style={{ gridTemplateColumns: "1fr" }}><div><span>{k}</span><b>{v}</b></div></div>)}
-          </div>
-          <p className="small faint">Engagement rate = average (reactions + comments + shares) per post ÷ followers, from your last {fbStats.postsAnalyzed} posts · {fbStats.postsPerWeek} posts / week.</p>
-          {fbLive.errors?.media && <p className="small red">Posts could not be loaded: {fbLive.errors.media}</p>}
-
-          {fbStats.topHashtags?.length > 0 && (
-            <>
-              <h4 style={{ margin: "18px 0 8px" }}>Hashtags your Page uses (and how those posts performed)</h4>
-              <div className="row wrap" style={{ gap: 8 }}>
-                {fbStats.topHashtags.slice(0, 20).map((h) => (
-                  <span key={h.hashtag} className="sa-igtag" title={`${h.posts} posts · avg ${h.avgEngagement ?? "—"} reactions+comments+shares`}>{h.hashtag} <span className="faint">· {h.posts} · {fmt(h.avgEngagement)}</span></span>
-                ))}
-              </div>
-            </>
-          )}
-
-          {fbLive.recentPosts.length > 0 && (
-            <>
-              <h4 style={{ margin: "18px 0 8px" }}>Recent posts</h4>
-              <div className="sa-igposts">
-                {fbLive.recentPosts.slice(0, 8).map((p) => <IgPostCard key={p.id} post={p} platformName="Facebook" />)}
-              </div>
-            </>
-          )}
-        </Card>
-      )}
-
-      {ytLive && (
-        <Card className="mt" title={<span className="row" style={{ gap: 10 }}>YouTube Channel — live overview <LiveTag>YouTube API v3</LiveTag></span>}
-          sub={`Real data from your connected channel · updated ${timeAgo(ytLive.fetchedAt)}`}
-          action={<Btn size="sm" icon="refresh" onClick={checkYt}>Refresh</Btn>}>
-          <div className="row">
-            {ytLive.profile.profilePictureUrl ? <img className="sa-profile-pic" src={ytLive.profile.profilePictureUrl} alt="" referrerPolicy="no-referrer" /> : <PlatformIcon platform="youtube" size={52} radius={26} />}
-            <div className="grow">
-              <b className="strong" style={{ fontSize: 17 }}>{ytLive.profile.name}</b> <Pill tone="red">@{ytLive.profile.username}</Pill>
-              <div className="small muted">{ytLive.profile.biography ? ytLive.profile.biography.slice(0, 160) : ""}</div>
-            </div>
-            {ytLive.profile.website && <a className="sa-link" href={ytLive.profile.website} target="_blank" rel="noreferrer">Open Channel <Icon name="arrowUpRight" size={14} /></a>}
-          </div>
-          <div className="sa-grid g-6 mt">
-            {[
-              ["Subscribers", fmt(ytLive.profile.followers)],
-              ["Total views", fmt(ytLive.profile.totalViews)],
-              ["Videos", fmt(ytLive.profile.mediaCount)],
-              ["Avg views", fmt(ytStats?.avgViews)],
-              ["Avg likes", fmt(ytStats?.avgLikes)],
-              ["Eng. rate", ytStats?.engagementRate != null ? `${ytStats.engagementRate}%` : "—"],
-            ].map(([k, v]) => <div key={k} className="sa-kv" style={{ gridTemplateColumns: "1fr" }}><div><span>{k}</span><b>{v}</b></div></div>)}
-          </div>
-          <p className="small faint">Engagement rate = average (likes + comments) per video ÷ subscribers, analyzed across your recent {ytStats?.postsAnalyzed || ytLive.recentPosts?.length || 0} videos · {ytStats?.postsPerWeek || 0} videos / week.</p>
-          {ytLive.recentPosts?.length > 0 && (
-            <>
-              <h4 style={{ margin: "18px 0 8px" }}>Recent videos & Shorts</h4>
-              <div className="row wrap" style={{ gap: 12 }}>
-                {ytLive.recentPosts.slice(0, 6).map((v) => (
-                  <a key={v.id} href={v.permalink} target="_blank" rel="noreferrer"
-                     style={{ textDecoration: "none", color: "inherit", width: 160, display: "flex", flexDirection: "column", gap: 6 }}>
-                    <div style={{ position: "relative", width: "100%", height: 96, borderRadius: 10, overflow: "hidden", background: "#000" }}>
-                      <img src={v.imageUrl} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      <span style={{ position: "absolute", bottom: 4, right: 4, background: "rgba(0,0,0,0.75)", color: "#fff", fontSize: 10, padding: "2px 5px", borderRadius: 4 }}>
-                        {v.productType === "REELS" ? "Short" : "Video"}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.3 }}>
-                      {v.caption}
-                    </div>
-                    <div className="faint" style={{ fontSize: 11 }}>
-                      {fmt(v.views)} views · {fmt(v.likes)} likes
-                    </div>
-                  </a>
-                ))}
-              </div>
-            </>
-          )}
-        </Card>
-      )}
 
       <div className="sa-banner mt">
         <span className="sa-banner-ic"><Icon name="bulb" size={22} /></span>
@@ -445,58 +318,337 @@ export default function SocialAccounts() {
         <Btn variant="primary" onClick={() => setConnect(ACCOUNTS.find((x) => x.key === "threads"))}>Connect Threads</Btn>
       </div>
 
-      <Modal open={!!connect} onClose={() => setConnect(null)} title={connect === "pick" ? "Connect an account" : `Connect ${connect?.name}`}>
+      <Modal
+        open={!!connect}
+        onClose={() => setConnect(null)}
+        title={
+          connect === "pick"
+            ? "Connect an account"
+            : isAlreadyAuthenticated && !switchAccount
+              ? `${connect?.name} — Connected Account`
+              : `Connect ${connect?.name}`
+        }
+      >
         {connect === "pick" ? (
           <div className="sa-grid g-3" style={{ gap: 10 }}>
-            {ACCOUNTS.map((a) => <button key={a.key} type="button" className="sa-goal" style={{ flexDirection: "column", alignItems: "center", textAlign: "center" }} onClick={() => setConnect(a)}><PlatformIcon platform={a.key} size={40} /><b style={{ fontSize: 13.5 }}>{a.name}</b></button>)}
+            {ACCOUNTS.map((a) => {
+              const isConn = getConnectedListForPlatform(a.key).length > 0;
+              return (
+                <button
+                  key={a.key}
+                  type="button"
+                  className="sa-goal"
+                  style={{
+                    flexDirection: "column",
+                    alignItems: "center",
+                    textAlign: "center",
+                    position: "relative",
+                  }}
+                  onClick={() => setConnect(a)}
+                >
+                  {isConn && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: 8,
+                        right: 8,
+                        background: "#10b981",
+                        color: "#fff",
+                        borderRadius: "10px",
+                        padding: "2px 7px",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 3,
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                      }}
+                    >
+                      <Icon name="check" size={10} /> Connected
+                    </span>
+                  )}
+                  <PlatformIcon platform={a.key} size={40} />
+                  <b style={{ fontSize: 13.5 }}>{a.name}</b>
+                  <span className="small muted" style={{ fontSize: 11 }}>
+                    {isConn ? "Manage / Remove" : "Connect"}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        ) : connect?.key === "youtube" ? (
-          <form onSubmit={handleConnectYoutube} style={{ display: "grid", gap: 16 }}>
-            <div className="row" style={{ gap: 14, alignItems: "center", padding: "14px 16px", background: "var(--sa-bg)", borderRadius: 14, border: "1px solid var(--sa-border)" }}>
-              <PlatformIcon platform="youtube" size={44} />
+        ) : isAlreadyAuthenticated && !switchAccount ? (
+          <div style={{ display: "grid", gap: 16 }}>
+            <div
+              style={{
+                padding: "12px 16px",
+                background: "rgba(16, 185, 129, 0.08)",
+                borderRadius: 12,
+                border: "1px solid rgba(16, 185, 129, 0.25)",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <span
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: "50%",
+                  background: "#10b981",
+                  color: "#fff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="check" size={18} />
+              </span>
               <div>
-                <b style={{ fontSize: 16 }}>Connect YouTube Channel (Data API v3)</b>
-                <p className="small muted" style={{ margin: "2px 0 0" }}>
-                  Enter your YouTube channel handle, URL, or channel ID to sync live subscriber counts, views, engagement rate, and recent videos.
+                <b style={{ fontSize: 14, color: "#065f46" }}>Account is Authenticated & Active</b>
+                <p className="small muted" style={{ margin: "2px 0 0", color: "#047857" }}>
+                  Sociva is connected to your {connect?.name} account. 1-click video publishing, thumbnail uploads, and analytics sync are fully active.
                 </p>
               </div>
             </div>
 
-            <div style={{ display: "grid", gap: 8 }}>
-              <label className="strong" style={{ fontSize: 13.5 }}>
-                Channel Handle, URL or Channel ID <span className="red">*</span>
-              </label>
-              <input
-                type="text"
-                className="sa-input"
-                value={ytChannelInput}
-                onChange={(e) => setYtChannelInput(e.target.value)}
-                placeholder="e.g. @mkbhd, @mrbeast, or youtube.com/@yourchannel"
-                style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14.5 }}
-                autoFocus
-              />
-              <p className="small faint" style={{ margin: 0 }}>
-                We use your secure Google YouTube Data API key to fetch verified public channel metrics and videos in real time.
+            {activeConnectedList.map((acc, idx) => {
+              const displayName = acc.name || acc.username || `${connect?.name} Channel`;
+              const displayHandle = acc.username
+                ? acc.username.startsWith("@")
+                  ? acc.username
+                  : `@${acc.username}`
+                : acc.accountId
+                  ? `ID: ${acc.accountId}`
+                  : null;
+              const followers = acc.metadata?.subscribers || acc.metadata?.followers;
+              const extraStats =
+                acc.metadata?.videoCount != null
+                  ? `${fmt(acc.metadata.videoCount)} videos`
+                  : acc.metadata?.mediaCount != null
+                    ? `${fmt(acc.metadata.mediaCount)} posts`
+                    : null;
+
+              return (
+                <div
+                  key={acc._id || idx}
+                  style={{
+                    padding: "16px",
+                    background: "var(--sa-bg)",
+                    borderRadius: 14,
+                    border: "1px solid var(--sa-border)",
+                    display: "grid",
+                    gap: 12,
+                  }}
+                >
+                  <div className="row between wrap" style={{ gap: 12, alignItems: "center" }}>
+                    <div className="row" style={{ gap: 12, alignItems: "center" }}>
+                      {acc.profilePictureUrl ? (
+                        <img
+                          src={acc.profilePictureUrl}
+                          alt=""
+                          style={{
+                            width: 50,
+                            height: 50,
+                            borderRadius: 25,
+                            objectFit: "cover",
+                            border: "2px solid #10b981",
+                          }}
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <PlatformIcon platform={connect?.key} size={50} radius={14} />
+                      )}
+                      <div>
+                        <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                          <b className="strong" style={{ fontSize: 16 }}>
+                            {displayName}
+                          </b>
+                          <Pill tone="green" icon="checkCircle">
+                            Connected
+                          </Pill>
+                        </div>
+                        {displayHandle && <div className="small muted">{displayHandle}</div>}
+                        {acc.parentAccountName && (
+                          <div className="small faint">via Facebook Page: {acc.parentAccountName}</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {(followers != null || extraStats || acc.tokenExpiresAt) && (
+                    <div
+                      className="row wrap"
+                      style={{
+                        gap: 8,
+                        padding: "8px 12px",
+                        background: "rgba(0, 0, 0, 0.03)",
+                        borderRadius: 10,
+                        fontSize: 12,
+                      }}
+                    >
+                      {followers != null && (
+                        <span style={{ fontWeight: 600 }}>
+                          {fmt(followers)} {connect?.key === "youtube" ? "subscribers" : "followers"}
+                        </span>
+                      )}
+                      {extraStats && <span className="muted">· {extraStats}</span>}
+                      {acc.tokenExpiresAt && (
+                        <span className="muted">
+                          · Token active until {new Date(acc.tokenExpiresAt).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <div
+                    className="row between wrap"
+                    style={{
+                      gap: 10,
+                      paddingTop: 12,
+                      borderTop: "1px solid var(--sa-border)",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Btn
+                      variant="outline"
+                      style={{
+                        color: "var(--sa-red, #ef4444)",
+                        borderColor: "rgba(239, 68, 68, 0.4)",
+                        background: "rgba(239, 68, 68, 0.05)",
+                        fontWeight: 600,
+                      }}
+                      icon="trash"
+                      onClick={() => handleRemoveAccount(acc)}
+                    >
+                      Remove / Disconnect Account
+                    </Btn>
+
+                    <button
+                      type="button"
+                      className="sa-link small faint"
+                      onClick={() => setSwitchAccount(true)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      Switch / Reconnect Account
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="row" style={{ justifyContent: "flex-end" }}>
+              <Btn variant="outline" onClick={() => setConnect(null)}>
+                Done
+              </Btn>
+            </div>
+          </div>
+        ) : connect?.key === "youtube" ? (
+          <div style={{ display: "grid", gap: 16 }}>
+            {switchAccount && (
+              <div className="row between" style={{ marginBottom: -6 }}>
+                <button
+                  type="button"
+                  className="sa-link small"
+                  style={{ background: "none", border: "none", cursor: "pointer" }}
+                  onClick={() => setSwitchAccount(false)}
+                >
+                  ← Back to connected account
+                </button>
+              </div>
+            )}
+            {/* OAuth Option 1: Official Google OAuth (Required for Publishing) */}
+            <div style={{ padding: "16px 18px", background: "var(--sa-bg)", borderRadius: 14, border: "1.5px solid #ef4444" }}>
+              <div className="row" style={{ gap: 12, alignItems: "center", marginBottom: 8 }}>
+                <PlatformIcon platform="youtube" size={32} />
+                <div>
+                  <b style={{ fontSize: 15 }}>Connect with Google OAuth (Recommended)</b>
+                  <span style={{ display: "block", fontSize: 11.5, color: "#10b981", fontWeight: 600 }}>Enables 1-Click Video Publishing & Thumbnails</span>
+                </div>
+              </div>
+              <p className="small muted" style={{ margin: "0 0 12px", lineHeight: 1.4 }}>
+                Authorizes Sociva to upload your finished videos, attach custom AI thumbnails, and publish directly to your YouTube channel without manual work.
               </p>
+              <a
+                href={`${API_BASE}/api/auth/youtube/connect?productId=${current?._id || ""}&token=${encodeURIComponent(localStorage.getItem("sociva_token") || "")}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 10,
+                  padding: "11px 18px",
+                  borderRadius: 10,
+                  background: "#FF0000",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: 13.5,
+                  textDecoration: "none",
+                  boxShadow: "0 2px 8px rgba(255,0,0,0.25)",
+                }}
+              >
+                <Icon name="sparkles" size={16} /> Connect YouTube Channel (OAuth 2.0)
+              </a>
             </div>
 
-            <div className="row" style={{ justifyContent: "flex-end", gap: 10, marginTop: 6 }}>
-              <Btn variant="outline" type="button" onClick={() => setConnect(null)}>
-                Cancel
-              </Btn>
-              <Btn
-                variant="primary"
-                type="submit"
-                loading={connectingYt}
-                icon="check"
-                style={{ background: "#FF0000", borderColor: "#FF0000" }}
-              >
-                Verify & Connect Channel
-              </Btn>
+            <div style={{ textAlign: "center", position: "relative", margin: "2px 0" }}>
+              <span style={{ background: "#fff", padding: "0 10px", fontSize: 11.5, color: "#94a3b8", fontWeight: 600 }}>
+                OR TRACK PUBLIC CHANNEL METRICS ONLY
+              </span>
             </div>
-          </form>
+
+            {/* Option 2: Public Channel Handle Verification */}
+            <form onSubmit={handleConnectYoutube} style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "grid", gap: 6 }}>
+                <label className="strong" style={{ fontSize: 13 }}>
+                  Channel Handle, URL or Channel ID
+                </label>
+                <input
+                  type="text"
+                  className="sa-input"
+                  value={ytChannelInput}
+                  onChange={(e) => setYtChannelInput(e.target.value)}
+                  placeholder="e.g. @mkbhd, @mrbeast, or youtube.com/@yourchannel"
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: 10, fontSize: 14 }}
+                />
+                <p className="small faint" style={{ margin: 0 }}>
+                  Syncs public metrics and videos via YouTube API key (read-only; publishing videos requires Google OAuth above).
+                </p>
+              </div>
+
+              <div className="row" style={{ justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                <Btn variant="outline" type="button" onClick={() => setConnect(null)}>
+                  Cancel
+                </Btn>
+                <Btn
+                  variant="outline"
+                  type="submit"
+                  loading={connectingYt}
+                  icon="check"
+                >
+                  Track Channel
+                </Btn>
+              </div>
+            </form>
+          </div>
         ) : (connect?.key === "facebook" || connect?.key === "instagram") ? (
           <div style={{ display: "grid", gap: 16 }}>
+            {switchAccount && (
+              <div className="row between" style={{ marginBottom: -6 }}>
+                <button
+                  type="button"
+                  className="sa-link small"
+                  style={{ background: "none", border: "none", cursor: "pointer" }}
+                  onClick={() => setSwitchAccount(false)}
+                >
+                  ← Back to connected account
+                </button>
+              </div>
+            )}
             <div className="row" style={{ gap: 14, alignItems: "center", padding: "14px 16px", background: "var(--sa-bg)", borderRadius: 14, border: "1px solid var(--sa-border)" }}>
               <PlatformIcon platform={connect?.key} size={44} />
               <div>
@@ -549,7 +701,24 @@ export default function SocialAccounts() {
             </p>
           </div>
         ) : (
-          <div className="sa-empty" style={{ padding: 10 }}><PlatformIcon platform={connect?.key} size={52} /><h4>OAuth for {connect?.name} is coming soon</h4><p>The backend supports Instagram, Facebook, and YouTube today. We'll notify you when {connect?.name} publishing is ready.</p><Btn onClick={() => { toast(`We'll let you know when ${connect?.name} is ready`, "success"); setConnect(null); }}>Notify me</Btn></div>
+          <div className="sa-empty" style={{ padding: 10 }}>
+            {switchAccount && (
+              <div className="row between" style={{ marginBottom: 12, width: "100%" }}>
+                <button
+                  type="button"
+                  className="sa-link small"
+                  style={{ background: "none", border: "none", cursor: "pointer" }}
+                  onClick={() => setSwitchAccount(false)}
+                >
+                  ← Back to connected account
+                </button>
+              </div>
+            )}
+            <PlatformIcon platform={connect?.key} size={52} />
+            <h4>OAuth for {connect?.name} is coming soon</h4>
+            <p>The backend supports Instagram, Facebook, and YouTube today. We'll notify you when {connect?.name} publishing is ready.</p>
+            <Btn onClick={() => { toast(`We'll let you know when ${connect?.name} is ready`, "success"); setConnect(null); }}>Notify me</Btn>
+          </div>
         )}
       </Modal>
     </>

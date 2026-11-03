@@ -16,6 +16,7 @@ import { Avatar, Btn, Card, Field, Modal, Pill, Segmented, Spinner, cx, gradient
 import FlowSteps from "../ui/FlowSteps";
 import PhonePreview from "../ui/PhonePreview";
 import ImageGenerator from "../ui/ImageGenerator";
+import YouTubeThumbnailModal from "../ui/YouTubeThumbnailModal";
 import ScheduleFields from "../ui/ScheduleFields";
 import ProjectSelectorHub from "../ui/ProjectSelectorHub";
 import CreateProjectModal from "../ui/CreateProjectModal";
@@ -57,6 +58,11 @@ const FORMAT_OPTIONS = [
   { key: "carousel", label: "Carousel", icon: "carousel", desc: "Swipeable multi-slide guide" },
   { key: "reel", label: "Video / Reel", icon: "video", desc: "Engaging short-form video" },
   { key: "text", label: "Text Post", icon: "pen", desc: "Facebook conversation post", fbOnly: true },
+];
+
+const YOUTUBE_FORMAT_OPTIONS = [
+  { key: "short", label: "YouTube Short", icon: "video", desc: "Vertical 9:16 viral short video" },
+  { key: "video", label: "Standard Video", icon: "video", desc: "Horizontal 16:9 full-length video" },
 ];
 
 const MEDIA_MODES = [
@@ -160,7 +166,12 @@ export default function ContentStudio() {
   const media = activePost?.media || [];
   const pm = PLATFORM_META[platform.key] || PLATFORM_META.instagram;
   const placement = view === "story" ? "story" : "feed";
-  const whereLabel = placement === "story" ? "Story" : "Feed";
+  const whereLabel =
+    platform.key === "youtube"
+      ? (activePost?.contentType === "short" || flow.format === "short" ? "YouTube Shorts" : "YouTube Channel")
+      : placement === "story"
+      ? "Story"
+      : "Feed";
 
   /** Poll a research job until it finishes */
   const pollJob = async (api, jobId, myRun) => {
@@ -290,6 +301,18 @@ export default function ContentStudio() {
           const r = await api.applyLiveHashtags(generatedPostDoc._id, { jobId: started.jobId });
           generatedPostDoc = r.data;
         }
+      } else if (platform.key === "youtube") {
+        // YouTube path: generate viral hooks, CTR titles, SEO description & thumbnail concept
+        setPipelineStage(3);
+        await sleep(300);
+        setPipelineStage(4);
+        const g = await api.generatePost({
+          productId: pid,
+          brief: optimizedBrief,
+          contentType: flow.format === "video" ? "video" : "short",
+          userPrompt: activePrompt,
+        });
+        generatedPostDoc = g.data;
       } else {
         // Facebook path
         const res = (await api.researchBrief({ productId: pid, brief: optimizedBrief })).data;
@@ -311,10 +334,12 @@ export default function ContentStudio() {
       // Auto-pair prepared media if user created/selected it in Step 1
       if (flow.preparedMedia && flow.preparedMedia.length > 0) {
         try {
-          const updateRes = await api.updatePost(generatedPostDoc._id, {
-            content: generatedPostDoc.content,
-            media: flow.preparedMedia,
-          });
+          const patch = platform.key === "youtube"
+            ? (flow.preparedMedia[0].type === "video"
+                ? { video: flow.preparedMedia[0] }
+                : { thumbnail: { url: flow.preparedMedia[0].url, source: "ai" } })
+            : { content: generatedPostDoc.content, media: flow.preparedMedia };
+          const updateRes = await api.updatePost(generatedPostDoc._id, patch);
           if (updateRes?.data) generatedPostDoc = updateRes.data;
         } catch (e) {
           console.warn("Failed to attach prepared media:", e.message);
@@ -412,17 +437,26 @@ export default function ContentStudio() {
       const api = postApi(platform.key);
       const r = await api.uploadMedia(f);
       if (activePost) {
-        const nextMedia = activePost.contentType === "carousel"
-          ? [...media, r.data].slice(0, 10)
-          : [r.data];
-        const saveRes = await api.updatePost(activePost._id, { content, media: nextMedia });
-        const updatedPost = saveRes.data || { ...activePost, media: nextMedia };
-        setFlow({ post: updatedPost, preparedMedia: nextMedia });
+        let updatedPost = null;
+        if (platform.key === "youtube") {
+          const isVid = f.type.startsWith("video/") || r.data.type === "video";
+          const patch = isVid ? { video: r.data } : { thumbnail: { url: r.data.url, source: "upload" } };
+          const saveRes = await api.updatePost(activePost._id, patch);
+          updatedPost = saveRes.data || { ...activePost, ...patch };
+          toast(isVid ? "Video file uploaded & attached!" : "Custom thumbnail uploaded & attached!", "success");
+        } else {
+          const nextMedia = activePost.contentType === "carousel"
+            ? [...media, r.data].slice(0, 10)
+            : [r.data];
+          const saveRes = await api.updatePost(activePost._id, { content, media: nextMedia });
+          updatedPost = saveRes.data || { ...activePost, media: nextMedia };
+          toast("Media uploaded from machine & saved!", "success");
+        }
+        setFlow({ post: updatedPost, preparedMedia: [r.data] });
         upsertPost(updatedPost);
-        toast("Media uploaded from machine & saved!", "success");
       } else {
         setFlow({ preparedMedia: [r.data] });
-        toast("Image uploaded & ready for your post!", "success");
+        toast("File uploaded & ready for your post!", "success");
       }
     } catch (er) {
       toast(er.message, "error");
@@ -442,22 +476,30 @@ export default function ContentStudio() {
     }));
 
     if (activePost) {
-      const nextMedia = activePost.contentType === "carousel"
-        ? [...media, ...items].slice(0, 10)
-        : items.slice(0, 1);
       try {
         const api = postApi(platform.key);
-        const saveRes = await api.updatePost(activePost._id, { content, media: nextMedia });
-        const updatedPost = saveRes.data || { ...activePost, media: nextMedia };
-        setFlow({ post: updatedPost, preparedMedia: nextMedia });
+        let updatedPost = null;
+        if (platform.key === "youtube") {
+          const patch = { thumbnail: { url: items[0].url, source: "ai" } };
+          const saveRes = await api.updatePost(activePost._id, patch);
+          updatedPost = saveRes.data || { ...activePost, ...patch };
+          toast("AI thumbnail attached to video!", "success");
+        } else {
+          const nextMedia = activePost.contentType === "carousel"
+            ? [...media, ...items].slice(0, 10)
+            : items.slice(0, 1);
+          const saveRes = await api.updatePost(activePost._id, { content, media: nextMedia });
+          updatedPost = saveRes.data || { ...activePost, media: nextMedia };
+          toast(`${items.length} AI image${items.length > 1 ? "s" : ""} added & saved!`, "success");
+        }
+        setFlow({ post: updatedPost, preparedMedia: items });
         upsertPost(updatedPost);
-        toast(`${items.length} AI image${items.length > 1 ? "s" : ""} added & saved!`, "success");
       } catch (er) {
         toast(er.message, "error");
       }
     } else {
       setFlow({ preparedMedia: items });
-      toast(`${items.length} AI generated visual${items.length > 1 ? "s" : ""} attached & ready for post!`, "success");
+      toast(`${items.length} AI visual${items.length > 1 ? "s" : ""} attached & ready for post!`, "success");
     }
   };
 
@@ -495,16 +537,27 @@ export default function ContentStudio() {
 
   const handlePublishNow = async () => {
     if (!activePost) return;
+    if (platform.key === "youtube" && !activePost.video?.url) {
+      toast("Please upload your MP4 or MOV video file before publishing to YouTube.", "error");
+      return;
+    }
     setBusy("publish");
     try {
       const api = postApi(platform.key);
-      // Ensure media and content are saved first, then approved
-      await api.updatePost(activePost._id, { content, media });
+      const patch = platform.key === "youtube"
+        ? { content, video: activePost.video, thumbnail: activePost.thumbnail }
+        : { content, media };
+      await api.updatePost(activePost._id, patch);
       await api.approvePost(activePost._id, placement);
       const r = await api.publishPost(activePost._id, placement);
       setFlow({ post: r.data });
       upsertPost(r.data);
-      toast(`Post successfully published to your ${pm.where[placement]}!`, "success");
+      toast(
+        platform.key === "youtube"
+          ? "Video successfully published to your YouTube channel!"
+          : `Post successfully published to your ${pm.where[placement]}!`,
+        "success"
+      );
     } catch (e) {
       toast(e.message, "error");
     } finally {
@@ -517,12 +570,18 @@ export default function ContentStudio() {
     if (bad) { toast(bad, "error"); return; }
     const at = fromScheduleInputs(when);
     if (!activePost) return;
+    if (platform.key === "youtube" && !activePost.video?.url) {
+      toast("Please upload your MP4 or MOV video file before scheduling.", "error");
+      return;
+    }
 
     setBusy("schedule");
     try {
       const api = postApi(platform.key);
-      // Ensure media and content are saved to MongoDB first, then approved
-      await api.updatePost(activePost._id, { content, media });
+      const patch = platform.key === "youtube"
+        ? { content, video: activePost.video, thumbnail: activePost.thumbnail }
+        : { content, media };
+      await api.updatePost(activePost._id, patch);
       await api.approvePost(activePost._id, placement);
       const r = await api.schedulePost(activePost._id, at.toISOString(), placement);
       setFlow({ post: r.data });
@@ -703,7 +762,17 @@ export default function ContentStudio() {
                     aria-checked={isSelected}
                     disabled={!p.live}
                     className={cx("sa-pcard", isSelected && "on")}
-                    onClick={() => setFlow({ platform: p.key })}
+                    onClick={() =>
+                      setFlow({
+                        platform: p.key,
+                        format:
+                          p.key === "youtube"
+                            ? "short"
+                            : flow.format === "short" || flow.format === "video"
+                            ? "image"
+                            : flow.format,
+                      })
+                    }
                   >
                     <PlatformIcon platform={p.key} size={42} radius={12} />
                     <span>{p.label}</span>
@@ -718,7 +787,10 @@ export default function ContentStudio() {
           <div style={{ display: "grid", gap: 10 }}>
             <label className="strong" style={{ fontSize: 14 }}>Post Format</label>
             <div className="row wrap" style={{ gap: 10 }}>
-              {FORMAT_OPTIONS.filter((f) => !f.fbOnly || flow.platform === "facebook").map((fmt) => {
+              {(flow.platform === "youtube"
+                ? YOUTUBE_FORMAT_OPTIONS
+                : FORMAT_OPTIONS.filter((f) => !f.fbOnly || flow.platform === "facebook")
+              ).map((fmt) => {
                 const isSelected = flow.format === fmt.key;
                 return (
                   <button
@@ -1124,9 +1196,9 @@ export default function ContentStudio() {
           </div>
 
           {/* Split 2-Column Workspace Layout */}
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(310px, 350px) 1fr", gap: 28, alignItems: "start" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(380px, 420px) 1fr", gap: 32, alignItems: "start" }}>
             {/* Left: Smartphone Interactive Preview */}
-            <div>
+            <div style={{ position: "sticky", top: 20 }}>
               <PhonePreview
                 post={activePost}
                 content={content}
@@ -1137,8 +1209,266 @@ export default function ContentStudio() {
             </div>
 
             {/* Right: Interactive Editor & Media Studio */}
-            <div style={{ display: "grid", gap: 20 }}>
-              {/* Hook & Caption Edit */}
+            {platform.key === "youtube" ? (
+              <div style={{ display: "grid", gap: 20 }}>
+                {/* 1. Title Laboratory */}
+                <div style={{ display: "grid", gap: 8, background: "#fff", border: "1px solid var(--sa-border)", borderRadius: 16, padding: "18px 20px" }}>
+                  <div className="row between">
+                    <label className="strong" style={{ fontSize: 14.5 }}>
+                      YouTube Video Title <span style={{ color: "#ef4444" }}>*</span>
+                    </label>
+                    <span className={cx("small", (content.title?.length || 0) > 100 ? "red" : "muted")}>
+                      {content.title?.length || 0} / 100 chars (Optimal: 40–70)
+                    </span>
+                  </div>
+                  <input
+                    className="sa-input"
+                    style={{ fontSize: 15, fontWeight: 600, padding: "10px 14px", height: 44, borderRadius: 10 }}
+                    value={content.title || ""}
+                    onChange={(e) => updateContent({ title: e.target.value })}
+                    placeholder="Enter a clickable, search-friendly title..."
+                  />
+
+                  {/* Alternative CTR Angles */}
+                  {content.titleAlternatives?.length > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <span className="small muted" style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>
+                        ⚡ AI CTR-Optimized Title Angles (Click to apply):
+                      </span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {content.titleAlternatives.map((alt, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            className="sa-chip"
+                            style={{ textAlign: "left", justifyContent: "flex-start", padding: "8px 12px", height: "auto", fontSize: 13, background: "var(--sa-bg)", border: "1px solid var(--sa-border)", borderRadius: 8, cursor: "pointer" }}
+                            onClick={() => updateContent({ title: alt })}
+                          >
+                            <span style={{ color: "#cc0000", fontWeight: 700, marginRight: 6 }}>#{i + 1}</span>
+                            {alt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Video Upload & AI Thumbnail Dock (Side-by-Side Cards) */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+                  {/* Video Upload Dock */}
+                  <div style={{ background: "#fff", border: activePost.video?.url ? "1.5px solid #10b981" : "1.5px dashed var(--sa-border)", borderRadius: 16, padding: "16px 18px", overflow: "hidden" }}>
+                    <div className="row between" style={{ marginBottom: 10 }}>
+                      <span className="strong" style={{ fontSize: 14 }}>🎬 Video File (MP4/MOV)</span>
+                      {activePost.video?.url ? (
+                        <Pill tone="green">Attached</Pill>
+                      ) : (
+                        <Pill tone="amber">Required</Pill>
+                      )}
+                    </div>
+                    {activePost.video?.url ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        <div className="small muted" style={{ wordBreak: "break-all" }}>
+                          <b>File:</b> {activePost.video.filename || "video.mp4"}
+                          {activePost.video.size && ` · ${(activePost.video.size / (1024 * 1024)).toFixed(1)} MB`}
+                        </div>
+                        <Btn
+                          size="sm"
+                          variant="outline"
+                          icon="upload"
+                          loading={busy === "upload"}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          Replace Video
+                        </Btn>
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: "center", padding: "10px 0" }}>
+                        <p className="small muted" style={{ margin: "0 0 10px" }}>
+                          Upload your externally edited {activePost.contentType === "short" ? "vertical 9:16 Short" : "horizontal 16:9 video"}
+                        </p>
+                        <Btn
+                          size="sm"
+                          variant="primary"
+                          icon="upload"
+                          loading={busy === "upload"}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          Upload Edited Video
+                        </Btn>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* AI Thumbnail Studio Dock */}
+                  <div style={{ background: "#fff", border: activePost.thumbnail?.url ? "1.5px solid #6366f1" : "1.5px dashed var(--sa-border)", borderRadius: 16, padding: "16px 18px", overflow: "hidden" }}>
+                    <div className="row between" style={{ marginBottom: 10 }}>
+                      <span className="strong" style={{ fontSize: 14 }}>🖼️ Custom Thumbnail</span>
+                      {activePost.thumbnail?.url ? (
+                        <Pill tone="violet">Ready</Pill>
+                      ) : (
+                        <Pill tone="blue">AI Concept</Pill>
+                      )}
+                    </div>
+                    {activePost.thumbnail?.url ? (
+                      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <img
+                          src={activePost.thumbnail.url}
+                          alt="Thumbnail"
+                          style={{
+                            width: 66,
+                            height: activePost.contentType === "short" ? 52 : 42,
+                            objectFit: "cover",
+                            borderRadius: 8,
+                            border: "1px solid var(--sa-border)",
+                            flexShrink: 0,
+                          }}
+                        />
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: "1 1 140px" }}>
+                          <Btn size="sm" variant="outline" icon="sparkles" onClick={() => setGenOpen(true)}>
+                            Change AI
+                          </Btn>
+                          <Btn size="sm" variant="ghost" icon="upload" onClick={() => fileInputRef.current?.click()}>
+                            Upload
+                          </Btn>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        {content.visual?.onImageText && (
+                          <div className="small muted" style={{ marginBottom: 8 }}>
+                            <b>Suggested Text:</b> "{content.visual.onImageText}"
+                          </div>
+                        )}
+                        <div className="row wrap" style={{ gap: 8 }}>
+                          <Btn size="sm" variant="grad" icon="sparkles" onClick={() => setGenOpen(true)}>
+                            Generate AI Art
+                          </Btn>
+                          <Btn size="sm" variant="outline" icon="upload" onClick={() => fileInputRef.current?.click()}>
+                            Upload Image
+                          </Btn>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Opening Hooks & Script Blueprint */}
+                {content.hooks?.length > 0 && (
+                  <div style={{ background: "var(--sa-primary-50)", border: "1px solid #c7bbf9", borderRadius: 16, padding: 16 }}>
+                    <div className="row between" style={{ marginBottom: 8 }}>
+                      <div className="row" style={{ gap: 6, alignItems: "center" }}>
+                        <Icon name="sparkles" size={16} style={{ color: "var(--sa-primary)" }} />
+                        <b style={{ fontSize: 13.5 }}>First 3-Second Viral Opening Hooks (For Recording)</b>
+                      </div>
+                      <Btn
+                        size="sm"
+                        variant="ghost"
+                        icon="copy"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(content.hooks.join("\n\n"));
+                          toast("Hooks copied to clipboard!", "success");
+                        }}
+                      >
+                        Copy Hooks
+                      </Btn>
+                    </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {content.hooks.map((h, i) => (
+                        <div key={i} className="small" style={{ background: "#fff", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--sa-border)" }}>
+                          <b style={{ color: "var(--sa-primary)", marginRight: 6 }}>Angle {i + 1}:</b> {h}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. SEO Description & Chapters */}
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div className="row between">
+                    <label className="strong" style={{ fontSize: 14 }}>SEO Description & Chapters</label>
+                    <span className="small muted">{content.description?.length || 0} / 5000</span>
+                  </div>
+                  <textarea
+                    className="big"
+                    style={{ minHeight: 140, fontSize: 13.5 }}
+                    value={content.description || ""}
+                    onChange={(e) => updateContent({ description: e.target.value })}
+                    placeholder="YouTube SEO description with intro, timestamps, and links..."
+                  />
+
+                  {/* Chapters Preview */}
+                  {content.chapters?.length > 0 && (
+                    <div className="small muted" style={{ background: "#f8f8fb", padding: "10px 14px", borderRadius: 10, border: "1px solid var(--sa-border)" }}>
+                      <b>Detected Video Chapters:</b>
+                      <div className="row wrap" style={{ gap: 10, marginTop: 4 }}>
+                        {content.chapters.map((ch, idx) => (
+                          <span key={idx} style={{ background: "#fff", padding: "3px 8px", borderRadius: 6, border: "1px solid var(--sa-border)" }}>
+                            <code>{ch.time}</code> {ch.title}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. Video Tags & Visibility */}
+                <div className="row wrap between" style={{ gap: 14, alignItems: "flex-end" }}>
+                  <div className="grow" style={{ display: "grid", gap: 6 }}>
+                    <label className="strong" style={{ fontSize: 13.5 }}>Search Tags (Keywords)</label>
+                    <div className="sa-tagrow wrap" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {(content.tags || []).map((t, idx) => (
+                        <span
+                          key={idx}
+                          className="sa-igtag on"
+                          style={{ cursor: "pointer", background: "#f1f5f9", borderColor: "#cbd5e1", color: "#334155" }}
+                          onClick={() => updateContent({ tags: (content.tags || []).filter((_, i) => i !== idx) })}
+                        >
+                          {t} ×
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: 6, minWidth: 160 }}>
+                    <label className="strong" style={{ fontSize: 13.5 }}>Visibility</label>
+                    <select
+                      className="sa-input"
+                      style={{ height: 36, fontSize: 13 }}
+                      value={content.privacyStatus || "public"}
+                      onChange={(e) => updateContent({ privacyStatus: e.target.value })}
+                    >
+                      <option value="public">🌐 Public (Everyone)</option>
+                      <option value="unlisted">🔗 Unlisted (Link only)</option>
+                      <option value="private">🔒 Private (Only you)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Action Bar: Save, Approve, Publish, Schedule */}
+                <div className="sa-step-foot" style={{ marginTop: 8 }}>
+                  <Btn
+                    onClick={() => savePostChanges(true)}
+                    loading={busy === "save"}
+                  >
+                    Save Draft
+                  </Btn>
+
+                  <div className="row wrap" style={{ gap: 10 }}>
+                    <Btn
+                      icon="check"
+                      variant="primary"
+                      onClick={handleApprove}
+                      loading={busy === "approve"}
+                      disabled={activePost.status === "approved" || activePost.status === "published"}
+                    >
+                      {activePost.status === "approved" ? "Approved ✓" : "Approve Video"}
+                    </Btn>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 20 }}>
+                {/* Hook & Caption Edit */}
               <div style={{ display: "grid", gap: 10 }}>
                 <div className="row between">
                   <label className="strong" style={{ fontSize: 14 }}>Post Caption & Hook</label>
@@ -1361,9 +1691,10 @@ export default function ContentStudio() {
                 </div>
               </div>
             </div>
-          </div>
-        </section>
-      )}
+          )}
+        </div>
+      </section>
+    )}
 
       {/* ═════════════════════════════════════════════════════════════
           AI IMAGE GENERATOR MODAL

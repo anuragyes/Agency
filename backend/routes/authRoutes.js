@@ -5,6 +5,8 @@ const express = require("express");
 const {
     connectMeta,
     handleMetaCallback,
+    connectYouTube,
+    handleYouTubeCallback,
     listConnectedAccounts,
     disconnectAccount,
 } = require("../controllers/authController.js");
@@ -17,6 +19,10 @@ authRouter.use(optionalAuth);
 // Meta OAuth (Instagram & Facebook)
 authRouter.get("/meta/connect", connectMeta);
 authRouter.get("/meta/callback", handleMetaCallback);
+
+// Google / YouTube OAuth
+authRouter.get("/youtube/connect", connectYouTube);
+authRouter.get("/youtube/callback", handleYouTubeCallback);
 
 // Account management
 authRouter.get("/accounts", listConnectedAccounts);

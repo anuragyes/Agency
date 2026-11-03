@@ -197,6 +197,10 @@ const fetchRecentVideos = async (uploadsPlaylistId, limit, key) => {
             };
         });
     } catch (err) {
+        if (err.response?.status === 404) {
+            // Channel has no uploaded videos or private uploads playlist
+            return [];
+        }
         console.warn("[YouTubeProvider] Error fetching recent videos:", err.message);
         return [];
     }

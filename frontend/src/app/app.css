@@ -449,8 +449,8 @@ input[type="range"].sa-slider::-moz-range-thumb { width: 22px; height: 22px; bor
 .sa-ev:hover { filter: brightness(.97); }
 
 /* phone preview */
-.sa-phone { width: 100%; max-width: 330px; margin: 0 auto; border-radius: 40px; background: #12121c; padding: 12px; box-shadow: 0 18px 40px rgba(15, 16, 32, .22); }
-.sa-phone-screen { background: #fff; border-radius: 30px; overflow: hidden; }
+.sa-phone { width: 100%; max-width: 395px; margin: 0 auto; border-radius: 46px; background: linear-gradient(145deg, #2a2b30, #131418 50%, #0a0a0d); padding: 11px; box-shadow: 0 24px 60px -12px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .1) inset; position: relative; }
+.sa-phone-screen { background: #fff; border-radius: 36px; overflow: hidden; }
 .sa-phone-head { display: flex; align-items: center; gap: 9px; padding: 14px 14px 10px; font-weight: 600; font-size: 13.5px; }
 .sa-phone-media { position: relative; aspect-ratio: 4 / 5; display: flex; align-items: flex-end; padding: 18px; color: #fff; overflow: hidden; }
 .sa-phone-media.reel { aspect-ratio: 9 / 13; }

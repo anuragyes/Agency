@@ -63,10 +63,14 @@ const getAccountCredentials = async ({ productId, userId, platform = "instagram"
         }
 
         if (acc && acc.accessToken) {
+            const isApiKeyOnly = acc.platform === "youtube" && (acc.accessToken === "API_KEY" || acc.accessToken.startsWith("AIza"));
             return {
                 source: "database",
                 platform,
-                accessToken: acc.accessToken,
+                accessToken: isApiKeyOnly ? null : acc.accessToken,
+                refreshToken: acc.refreshToken || null,
+                apiKey: isApiKeyOnly ? acc.accessToken : null,
+                isOAuth: !isApiKeyOnly,
                 accountId: acc.accountId,
                 username: acc.username,
                 name: acc.name,
@@ -100,11 +104,14 @@ const getAccountCredentials = async ({ productId, userId, platform = "instagram"
             };
         }
 
-        if (platform === "youtube" && process.env.YOUTUBE_API_KEY) {
+        if (platform === "youtube") {
+            const oauthToken = process.env.YOUTUBE_OAUTH_ACCESS_TOKEN || process.env.YOUTUBE_ACCESS_TOKEN;
             return {
                 source: "env",
                 platform: "youtube",
-                accessToken: process.env.YOUTUBE_API_KEY,
+                accessToken: oauthToken || null,
+                apiKey: process.env.YOUTUBE_API_KEY || null,
+                isOAuth: Boolean(oauthToken),
                 accountId: process.env.YOUTUBE_CHANNEL_ID || process.env.YOUTUBE_CHANNEL_HANDLE,
                 username: process.env.YOUTUBE_CHANNEL_HANDLE,
             };

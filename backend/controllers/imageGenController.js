@@ -22,6 +22,7 @@ const AdImage = require("../models/AdImage.js");
 const Product = require("../models/Product.js");
 const InstagramPost = require("../models/InstagramPost.js");
 const FacebookPost = require("../models/FacebookPost.js");
+const YouTubePost = require("../models/YouTubePost.js");
 const { generateAdLayout, reviseAdLayout, editAdLayout, buildStyleVariants, layoutFromPlan } = require("../ai/imageGen/AdLayoutAgent.js");
 const { ASPECTS, COMPOSITIONS, PRODUCT_SHAPES, TEXT_LIMITS, MAX_VARIANTS, FONT_PAIRS, DEFAULT_FONT_PAIR } = require("../ai/imageGen/AdLayoutSpecs.js");
 const { renderPreviewSvg } = require("../services/imageGen/layoutRenderer.js");
@@ -31,7 +32,7 @@ const { refreshUrl, loadImage } = require("../services/imageGen/imageStorage.js"
 const { cutOutLogo } = require("../services/imageGen/logoCutout.js");
 const Brand = require("../ai/imageGen/BrandKit.js");
 
-const POST_MODELS = { instagram: InstagramPost, facebook: FacebookPost };
+const POST_MODELS = { instagram: InstagramPost, facebook: FacebookPost, youtube: YouTubePost };
 const STUCK_MS = 10 * 60 * 1000; // a "generating" job older than this is treated as crashed
 /** how many photos of a batch are made at the same time (free tiers rate-limit -> 2 is safe) */
 const CONCURRENCY = Math.min(MAX_VARIANTS, Math.max(1, Number(process.env.IMAGE_GEN_CONCURRENCY) || 2));
@@ -111,10 +112,11 @@ const view = (doc, assets = {}) => {
     };
 };
 
-/** Default aspect ratio: asked > the draft's visual brief > reel/story = 9:16 > 4:5 */
+/** Default aspect ratio: asked > the draft's visual brief > reel/short = 9:16 > video = 16:9 > 4:5 */
 const pickAspect = (asked, post) => {
     if (ASPECTS[asked]) return asked;
-    if (post?.contentType === "reel") return "9:16";
+    if (post?.contentType === "reel" || post?.contentType === "short") return "9:16";
+    if (post?.contentType === "video") return "16:9";
     const fromPost = post?.content?.visual?.aspectRatio;
     return ASPECTS[fromPost] ? fromPost : "4:5";
 };
@@ -188,10 +190,21 @@ const getHealth = async (req, res, next) => {
 const resolveContext = async ({ prompt, productId, postId, platform } = {}) => {
     if (!prompt || !String(prompt).trim()) throw httpError(400, "Describe the image you want (prompt)");
     let post = null;
+    let resolvedPlatform = platform;
     if (postId) {
-        const Model = POST_MODELS[platform] || InstagramPost;
         if (!mongoose.isValidObjectId(postId)) throw httpError(400, "Invalid postId");
-        post = await Model.findById(postId).lean();
+        if (platform && POST_MODELS[platform]) {
+            post = await POST_MODELS[platform].findById(postId).lean();
+        }
+        if (!post) {
+            for (const [pKey, m] of Object.entries(POST_MODELS)) {
+                post = await m.findById(postId).lean();
+                if (post) {
+                    resolvedPlatform = pKey;
+                    break;
+                }
+            }
+        }
         if (!post) throw httpError(404, "Post not found");
     }
     const pid = productId || post?.productId;
@@ -202,7 +215,7 @@ const resolveContext = async ({ prompt, productId, postId, platform } = {}) => {
         if (!product) throw httpError(404, "Product not found");
         productProfile = product.aiProfile || productProfile;
     }
-    return { post, pid, productProfile, platform: post ? (POST_MODELS[platform] ? platform : "instagram") : null };
+    return { post, pid, productProfile, platform: post ? (POST_MODELS[resolvedPlatform] ? resolvedPlatform : "instagram") : null };
 };
 
 // ───────── POST /layout  { prompt, productId?, postId?, platform?, aspectRatio?, purpose?, logoCorner? } ─────────
