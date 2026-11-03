@@ -59,7 +59,7 @@ app.get("/api/prompts", (req, res) => res.json(prompts));
 app.use("/api", optionalAuth);
 
 app.use("/api/user", userAuthRouter);                                     // User Authentication: Signup, Login, Google OAuth
-app.use("/api/products", productRouter);                           // Phase 1: Product Profile
+app.use("/api/products", productRouter);                          // Phase 1: Product Profile
 app.use("/api/market-research", marketResearchRouter);             // Phase 2: Market Research (5 platforms + aggregator)
 app.use("/api/content", contentRouter);
 // Studio step 1: prompt + platform -> compact brief

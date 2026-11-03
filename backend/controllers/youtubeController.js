@@ -115,6 +115,11 @@ const connectChannel = async (req, res, next) => {
 
         let savedAccount = null;
         if (userId) {
+            const existing = await SocialAccount.findOne({ userId, platform: "youtube" }).lean();
+            const existingOAuthToken = existing?.accessToken && !existing.accessToken.startsWith("AIza") && existing.accessToken !== "API_KEY"
+                ? existing.accessToken
+                : null;
+
             const updateDoc = {
                 userId,
                 platform: "youtube",
@@ -122,7 +127,7 @@ const connectChannel = async (req, res, next) => {
                 username: profile.username || profile.id,
                 name: profile.name || profile.username,
                 profilePictureUrl: profile.profilePictureUrl || null,
-                accessToken: process.env.YOUTUBE_API_KEY || "API_KEY",
+                accessToken: existingOAuthToken || process.env.YOUTUBE_OAUTH_ACCESS_TOKEN || "API_KEY",
                 metadata: {
                     subscribers: profile.followers,
                     mediaCount: profile.mediaCount,
@@ -139,7 +144,7 @@ const connectChannel = async (req, res, next) => {
             savedAccount = await SocialAccount.findOneAndUpdate(
                 { userId, platform: "youtube" },
                 updateDoc,
-                { upsert: true, new: true, setDefaultsOnInsert: true }
+                { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
             ).lean();
         }
 

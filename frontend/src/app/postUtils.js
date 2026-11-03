@@ -15,6 +15,8 @@ export const TYPE_META = {
   image: { label: "Image post", icon: "image" },
   reel: { label: "Reel", icon: "video" },
   carousel: { label: "Carousel", icon: "carousel" },
+  short: { label: "YouTube Short", icon: "video" },
+  video: { label: "Standard Video", icon: "video" },
 };
 
 /* Per-platform names + rules used by the Studio, Editor and Pipeline */
@@ -35,6 +37,14 @@ export const PLATFORM_META = {
     mediaHint: "Add JPEG / PNG / MP4", badFile: "Use a JPEG or PNG image, or an MP4/MOV video.",
     where: { feed: "Facebook Page", story: "Facebook Page Story" },
   },
+  youtube: {
+    label: "YouTube",
+    types: [["short", "YouTube Short"], ["video", "Standard Video"]],
+    maxTags: 15, minTags: 0, captionLimit: 5000, liveHashtagSearch: false, grid: false,
+    accept: "video/mp4,video/quicktime,image/jpeg,image/png", mimes: ["video/mp4", "video/quicktime", "image/jpeg", "image/png"],
+    mediaHint: "Add MP4 / MOV Video", badFile: "Use an MP4 or MOV video file.",
+    where: { feed: "YouTube Channel", story: "YouTube Shorts" },
+  },
 };
 export const platformOf = (p) => (p?.platform && PLATFORM_META[p.platform] ? p.platform : "instagram");
 export const platformMeta = (p) => PLATFORM_META[platformOf(p)];
@@ -52,8 +62,13 @@ export const editorPath = (p) => {
   return `/app/editor/${id}${platform && platform !== "instagram" ? `?platform=${platform}` : ""}`;
 };
 
-/** Where the published result lives: post.instagram or post.facebook */
-export const publishInfo = (p) => (platformOf(p) === "facebook" ? p?.facebook : p?.instagram) || {};
+/** Where the published result lives: post.instagram, post.facebook or post.youtube */
+export const publishInfo = (p) => {
+  const plat = platformOf(p);
+  if (plat === "youtube") return p?.youtube || {};
+  if (plat === "facebook") return p?.facebook || {};
+  return p?.instagram || {};
+};
 
 /* ── "Schedule for later" — date + time inputs use the browser's local time zone ── */
 const pad2 = (n) => String(n).padStart(2, "0");

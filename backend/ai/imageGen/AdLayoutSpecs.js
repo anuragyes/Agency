@@ -11,6 +11,7 @@ const ASPECTS = {
     "1:1": { width: 1080, height: 1080, sd: { width: 768, height: 768 } },
     "4:5": { width: 1080, height: 1350, sd: { width: 640, height: 800 } },
     "9:16": { width: 1080, height: 1920, sd: { width: 576, height: 1024 } },
+    "16:9": { width: 1920, height: 1080, sd: { width: 1024, height: 576 } },
 };
 const DEFAULT_ASPECT = "4:5";
 
@@ -56,7 +57,7 @@ const COMPOSITIONS = {
         surfaceY: null, align: "center", emptyArea: "bottom",
     },
 };
-const DEFAULT_COMPOSITION_BY_ASPECT = { "1:1": "text-bottom", "4:5": "text-top", "9:16": "text-top" };
+const DEFAULT_COMPOSITION_BY_ASPECT = { "1:1": "text-bottom", "4:5": "text-top", "9:16": "text-top", "16:9": "text-top" };
 
 /** Product outlines the renderer can draw (ratio = natural width / height, used to fit the shape in its box) */
 const PRODUCT_SHAPES = {

@@ -196,7 +196,7 @@ export default function PostAnalyst() {
     // Map DB posts by their published media ID
     const dbByMediaId = new Map();
     dbPosts.forEach((p) => {
-      const mid = p.instagram?.mediaId || p.facebook?.postId;
+      const mid = p.instagram?.mediaId || p.facebook?.postId || p.youtube?.videoId;
       if (mid) dbByMediaId.set(String(mid), p);
     });
 
@@ -223,7 +223,7 @@ export default function PostAnalyst() {
     // Add any DB published posts that weren't in the recent live list
     const liveIds = new Set(livePosts.map((lp) => String(lp.id)));
     dbPosts.forEach((dp) => {
-      const mid = dp.instagram?.mediaId;
+      const mid = dp.instagram?.mediaId || dp.facebook?.postId || dp.youtube?.videoId;
       if (!mid || !liveIds.has(String(mid))) {
         const matchedProd = dp.productId
           ? products.find((pr) => String(pr._id) === String(dp.productId))

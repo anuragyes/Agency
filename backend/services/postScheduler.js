@@ -12,8 +12,10 @@
 const mongoose = require("mongoose");
 const InstagramPost = require("../models/InstagramPost.js");
 const FacebookPost = require("../models/FacebookPost.js");
+const YouTubePost = require("../models/YouTubePost.js");
 const instagramPosts = require("../controllers/instagramPostController.js");
 const facebookPosts = require("../controllers/facebookPostController.js");
+const youtubePosts = require("../controllers/youtubePostController.js");
 
 const TICK_MS = Number(process.env.SCHEDULER_TICK_MS) || 30 * 1000;
 const BATCH = 10; // posts per platform per tick
@@ -21,6 +23,7 @@ const BATCH = 10; // posts per platform per tick
 const SOURCES = [
     { platform: "instagram", Model: InstagramPost, publish: instagramPosts.publishScheduled },
     { platform: "facebook", Model: FacebookPost, publish: facebookPosts.publishScheduled },
+    { platform: "youtube", Model: YouTubePost, publish: youtubePosts.publishScheduled },
 ];
 
 let timer = null;

@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Icon, { PlatformIcon, PLATFORM_LABEL } from "../ui/Icon";
-import { Btn, Card, IconBtn, Modal, PageHeader, Pill, Segmented, Toggle, gradientFor, useToast } from "../ui/kit";
+import { Btn, Card, IconBtn, Modal, PageHeader, Pill, Segmented, Toggle, cx, gradientFor, useToast } from "../ui/kit";
 import ScheduleFields from "../ui/ScheduleFields";
 import ProjectSelectorHub from "../ui/ProjectSelectorHub";
 import CreateProjectModal from "../ui/CreateProjectModal";
@@ -52,10 +52,21 @@ export default function Calendar() {
   const [picked, setPicked] = useState(null); // scheduled post being re-timed
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
+  const [platformFilter, setPlatformFilter] = useState("all"); // "all" | "instagram" | "facebook" | "youtube"
 
   const real = useMemo(() => posts.data || [], [posts.data]);
   const brandName = current?.aiProfile?.name || current?.name || current?.rawInput?.slice(0, 24) || "Your Project";
   const pid = current?._id;
+
+  // Filter posts by selected social media platform
+  const filtered = useMemo(() => {
+    if (platformFilter === "all") return real;
+    return real.filter((p) => (p.platform || "instagram") === platformFilter);
+  }, [real, platformFilter]);
+
+  const igCount = useMemo(() => real.filter((p) => (p.platform || "instagram") === "instagram").length, [real]);
+  const fbCount = useMemo(() => real.filter((p) => p.platform === "facebook").length, [real]);
+  const ytCount = useMemo(() => real.filter((p) => p.platform === "youtube").length, [real]);
 
   const y = cursor.getFullYear();
   const m = cursor.getMonth();
@@ -64,7 +75,7 @@ export default function Calendar() {
 
   const events = useMemo(() => {
     const map = {};
-    for (const p of real) {
+    for (const p of filtered) {
       // published -> when it went live · scheduled -> the day it will go live · else -> last edit
       const d = new Date(publishInfo(p).publishedAt || (isPlanned(p) ? p.scheduledAt : null) || p.updatedAt);
       if (d.getFullYear() !== y || d.getMonth() !== m) continue;
@@ -79,7 +90,7 @@ export default function Calendar() {
       });
     }
     return map;
-  }, [real, y, m]);
+  }, [filtered, y, m]);
 
   const cells = [];
   const prevDays = new Date(y, m, 0).getDate();
@@ -100,11 +111,11 @@ export default function Calendar() {
     if (e.ch !== "ai") counts[e.ch] = (counts[e.ch] || 0) + 1;
   });
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  const drafts = real.filter((p) => p.status === "draft");
-  const scheduled = real
+  const drafts = filtered.filter((p) => p.status === "draft");
+  const scheduled = filtered
     .filter((p) => p.status === "scheduled" && p.scheduledAt)
     .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt));
-  const published = real.filter((p) => p.status === "published");
+  const published = filtered.filter((p) => p.status === "published");
 
   const open = (e) =>
     isPlanned(e.post)
@@ -178,6 +189,45 @@ export default function Calendar() {
         </Btn>
       </PageHeader>
 
+      {/* ───── Social Media Filter Chips ───── */}
+      <div className="row wrap between" style={{ alignItems: "center", gap: 12, margin: "6px 0 16px" }}>
+        <div className="row wrap" style={{ gap: 8, alignItems: "center" }}>
+          <span className="small strong muted" style={{ marginRight: 4 }}>Filter by Channel:</span>
+          <button
+            type="button"
+            className={cx("sa-chip", platformFilter === "all" && "on")}
+            onClick={() => setPlatformFilter("all")}
+            style={{ cursor: "pointer", height: 36, padding: "0 14px", fontSize: 13 }}
+          >
+            <Icon name="globe" size={15} /> All Social Media ({real.length})
+          </button>
+          <button
+            type="button"
+            className={cx("sa-chip", platformFilter === "instagram" && "on")}
+            onClick={() => setPlatformFilter("instagram")}
+            style={{ cursor: "pointer", height: 36, padding: "0 14px", fontSize: 13 }}
+          >
+            <PlatformIcon platform="instagram" size={17} /> Instagram ({igCount})
+          </button>
+          <button
+            type="button"
+            className={cx("sa-chip", platformFilter === "facebook" && "on")}
+            onClick={() => setPlatformFilter("facebook")}
+            style={{ cursor: "pointer", height: 36, padding: "0 14px", fontSize: 13 }}
+          >
+            <PlatformIcon platform="facebook" size={17} /> Facebook ({fbCount})
+          </button>
+          <button
+            type="button"
+            className={cx("sa-chip", platformFilter === "youtube" && "on")}
+            onClick={() => setPlatformFilter("youtube")}
+            style={{ cursor: "pointer", height: 36, padding: "0 14px", fontSize: 13 }}
+          >
+            <PlatformIcon platform="youtube" size={17} /> YouTube ({ytCount})
+          </button>
+        </div>
+      </div>
+
       <div className="sa-grid g-cal">
         <Card>
           <div className="row between wrap" style={{ marginBottom: 18 }}>
@@ -208,8 +258,8 @@ export default function Calendar() {
             </div>
           </div>
 
-          {/* Empty state when project has 0 posts */}
-          {real.length === 0 ? (
+          {/* Empty state when project or channel filter has 0 posts */}
+          {filtered.length === 0 ? (
             <div
               style={{
                 textAlign: "center",
@@ -238,13 +288,22 @@ export default function Calendar() {
               </span>
               <div>
                 <h3 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 700 }}>
-                  No posts planned for {brandName} yet
+                  {real.length === 0
+                    ? `No posts planned for ${brandName} yet`
+                    : `No ${PLATFORM_LABEL[platformFilter] || platformFilter} posts in calendar`}
                 </h3>
                 <p className="muted small" style={{ maxWidth: 440, margin: "0 auto", lineHeight: 1.5 }}>
-                  Every project has its own isolated calendar. Schedule a post or generate new on-brand content in AI Content Studio.
+                  {real.length === 0
+                    ? "Every project has its own isolated calendar. Schedule a post or generate new on-brand content in AI Content Studio."
+                    : `You currently have 0 posts for ${PLATFORM_LABEL[platformFilter] || platformFilter}. Switch to 'All Social Media' or create a new post in Studio.`}
                 </p>
               </div>
               <div className="row wrap center" style={{ gap: 10, marginTop: 4 }}>
+                {platformFilter !== "all" && real.length > 0 && (
+                  <Btn variant="outline" onClick={() => setPlatformFilter("all")}>
+                    Show All Channels
+                  </Btn>
+                )}
                 <Btn variant="primary" icon="plus" to="/app/studio">
                   Create Post for {brandName}
                 </Btn>

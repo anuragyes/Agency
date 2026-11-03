@@ -130,7 +130,7 @@ export default function Trends() {
       )}
 
       <div className="sa-grid g-main-r">
-        <Card title={<>Trending topics {trendRows.length ? <LiveTag /> : null}</>} sub={trendRows.length ? `Google search interest · ${trendData.geo}` : "Search interest for topics from your selected project"}>
+        <Card title={<>Trending topics {trendRows.length ? <LiveTag /> : null}</>} sub={trendRows.length ? `Google search interest · ${trendData.geo}${trendData.stale ? " · cached data" : ""}` : "Search interest for topics from your selected project"}>
           {trendsError && <p className="small red">{trendsError}</p>}
           {trendsBusy && <div className="row" style={{ padding: 16, gap: 10 }}><Spinner /> Fetching project-specific search interest…</div>}
           {!trendsBusy && !trendRows.length && <div className="small muted" style={{ padding: 16 }}>No Google Trends results yet. This project’s research and keywords will be used to find relevant topics.</div>}
