@@ -41,7 +41,15 @@ class ResilientLLMWrapper {
 
 class LLMFactory {
     static create(provider) {
-        const hasGemini = Boolean(String(process.env.GEMINI_API_KEY || "").trim());
+        const hasGemini = Boolean(
+            String(
+                process.env.GEMINI_API_KEY ||
+                process.env.GEMINI_IMAGE_API_KEY ||
+                process.env.GOOGLE_API_KEY ||
+                process.env.GOOGLE_GENAI_API_KEY ||
+                ""
+            ).trim()
+        );
         const envProvider = String(process.env.LLM_PROVIDER || "").trim().toLowerCase();
 
         // Determine effective provider:
