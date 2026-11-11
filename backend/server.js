@@ -42,6 +42,7 @@ const authRouter = require("./routes/authRoutes.js");
 const userAuthRouter = require("./routes/userAuthRoutes.js");
 const youtubeRouter = require("./routes/youtubeRoutes.js");
 const trendsRouter = require("./routes/trendsRoutes.js");
+const weeklyPlanRouter = require("./routes/weeklyPlanRoutes.js");
 const { optionalAuth } = require("./middleware/authMiddleware.js");
 
 const PORT = process.env.PORT || 5000;
@@ -51,7 +52,7 @@ const PORT = process.env.PORT || 5000;
 // STEP 5: Connect to MongoDB (exits the process if it fails, see config/db.js)
 connectDB();
 
-// STEP 6: Routes
+// STEP 6: Routesssss
 app.get("/", (req, res) => res.send("Server is running"));        // health check
 app.get("/api/prompts", (req, res) => res.json(prompts));
 
@@ -72,6 +73,7 @@ app.use("/api/inbox", inboxRouter);                                   // Unified
 app.use("/api/auth", authRouter);                                     // Multi-tenant OAuth: Meta (Instagram & Facebook), YouTube, X
 app.use("/api/youtube", youtubeRouter);                               // YouTube Channel: profile, stats, videos, and channel connection
 app.use("/api/trends", trendsRouter);                                 // Google Trends interest for project-specific topics
+app.use("/api/weekly-planner", weeklyPlanRouter);                         // 7-Day Batch AI Content Sprint & Planner
 
 // STEP 7: 404 for unknown routes (instead of Express' default HTML page)
 app.use((req, res) => {

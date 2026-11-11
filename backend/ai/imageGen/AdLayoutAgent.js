@@ -56,7 +56,7 @@ const cleanPhotoPrompt = (v) =>
         // drop whole clauses that ask for (or mention) written text
         .split(/(?<=[.;,])\s+/)
         // ... and layout talk with numbers ("bottom 30% empty"): image models paint the numbers into the photo
-        .filter((clause) => !/\b(text|typography|lettering|watermark|caption|written|spelled|font)s?\b/i.test(clause) && !/\d+(?:\.\d+)?\s*%/.test(clause))
+        .filter((clause) => !/\b(text|typography|lettering|watermark|caption|written|spelled|font|headline|subline|slogan|logo|button|badge|label text)s?\b/i.test(clause) && !/\d+(?:\.\d+)?\s*%/.test(clause))
         .join(" ")
         .replace(/\s+([,.;])/g, "$1")
         .replace(/([,.;])(?:\s*[,.;])+/g, "$1")

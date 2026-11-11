@@ -340,7 +340,16 @@ const sizeRules = (layout, box, W) => {
 
 const layoutText = (layout, W, H) => {
     const comp = COMPOSITIONS[layout.composition];
-    const box = areasOf(layout, W, H).text;
+    const rawBox = areasOf(layout, W, H).text;
+    // Safe inset: text never touches the edge of its composition box
+    const INSET_X = W * 0.03; // 3% horizontal safe margin on each side
+    const INSET_Y = H * 0.015; // 1.5% vertical safe margin on each side
+    const box = {
+        x: rawBox.x + INSET_X,
+        y: rawBox.y + INSET_Y,
+        w: rawBox.w - INSET_X * 2,
+        h: rawBox.h - INSET_Y * 2,
+    };
     const S = sizeRules(layout, box, W);
     const t = layout.texts || {};
     const headT = typeOf(layout, "heading");
@@ -383,28 +392,33 @@ const layoutText = (layout, W, H) => {
             cta = { fs, textW, h: Math.round(Math.max(fs * 2.1, 44)), w: Math.round(Math.min(box.w, textW + fs * CTA_PAD)) };
         }
 
+        const brandName = (layout.brand?.brandName || layout.brandName || layout.productName || layout.brand?.name || "").trim();
+        const kickerFs = brandName ? Math.max(13, Math.min(22, Math.round(head.fs * 0.28))) : 0;
+        const kickerH = brandName ? Math.round(kickerFs * 1.3) : 0;
+        const gap0 = brandName ? Math.round(kickerFs * 0.5) : 0;
         const headH = head.lines.length * head.fs * lh;
         const subH = sub.lines.length * sub.fs * 1.3;
         const gap1 = sub.lines.length ? head.fs * 0.35 : 0;
         const gap2 = cta ? sub.fs * 0.9 : 0;
-        return { head, sub, cta, headH, subH, gap1, gap2, total: headH + gap1 + subH + gap2 + (cta ? cta.h : 0), issues };
+        return { head, sub, cta, kicker: brandName ? { text: brandName.toUpperCase(), fs: kickerFs } : null, kickerH, gap0, headH, subH, gap1, gap2, total: kickerH + gap0 + headH + gap1 + subH + gap2 + (cta ? cta.h : 0), issues };
     };
 
     // the WHOLE block (headline + subline + button) must fit the text box -> shrink the headline until it does
     let capFs = S.cap;
     let F = fit(capFs);
-    while (F.total > box.h && F.head.fs > S.headFloor) {
+    const minFloor = layout.brand ? Math.min(S.headFloor, MIN_HEAD_FS) : S.headFloor;
+    while (F.total > box.h && F.head.fs > minFloor) {
         capFs = F.head.fs - 2;
         F = fit(capFs);
     }
     if (F.total > box.h + 0.5) F.issues.push({ code: "text-too-tall", target: "text", detail: "Texts are too long for this layout — shorten the subline or headline." });
-    const { head, sub, cta, headH, subH, gap1, gap2, total, issues } = F;
+    const { head, sub, cta, kicker, kickerH, gap0, headH, subH, gap1, gap2, total, issues } = F;
 
     let top;
     if (comp.emptyArea === "top") top = box.y;
     else if (comp.emptyArea === "bottom") top = box.y + box.h - total;
     else top = box.y + (box.h - total) / 2;
-    top = Math.max(0, Math.min(Math.max(box.y, top), H - total - H * 0.02));
+    top = Math.max(box.y, Math.min(top, box.y + Math.max(0, box.h - total)));
 
     const center = comp.align === "center";
     const x = center ? box.x + box.w / 2 : box.x;
@@ -412,9 +426,10 @@ const layoutText = (layout, W, H) => {
         box, align: comp.align, x, top, total,
         fontPair: FONT_PAIRS[layout.fontPair] ? layout.fontPair : DEFAULT_FONT_PAIR,
         lineHeight: lh,
-        headline: { ...head, y: top + head.fs * 0.9 },
-        subline: { ...sub, y: top + headH + gap1 + sub.fs * 0.95 },
-        cta: cta && { ...cta, x: center ? x - cta.w / 2 : x, y: top + headH + gap1 + subH + gap2 },
+        kicker: kicker ? { ...kicker, y: top + kicker.fs * 0.9 } : null,
+        headline: { ...head, y: top + kickerH + gap0 + head.fs * 0.9 },
+        subline: { ...sub, y: top + kickerH + gap0 + headH + gap1 + sub.fs * 0.95 },
+        cta: cta && { ...cta, x: center ? x - cta.w / 2 : x, y: top + kickerH + gap0 + headH + gap1 + subH + gap2 },
         issues,
     };
 };
@@ -426,26 +441,31 @@ const scrimSvg = (layout, W, H, theme) => {
     const bc = layout.brand ? Brand.TEXT_COLORS[theme === "light" ? "light" : "dark"] : null;
     // brand kit: deep learning-blue scrim under white text, white scrim under dark text
     const color = bc ? bc.scrim : theme === "light" ? "#000000" : "#ffffff";
-    const strong = bc ? bc.scrimOpacity : theme === "light" ? 0.62 : 0.72;
+    const strong = bc ? bc.scrimOpacity : theme === "light" ? 0.78 : 0.82;
     let rect;
     let grad;
     if (comp.emptyArea === "top") {
-        rect = { x: 0, y: 0, w: W, h: Math.min(H, tb.y + tb.h + H * 0.1) };
+        rect = { x: 0, y: 0, w: W, h: Math.min(H, tb.y + tb.h + H * 0.18) };
         grad = { x1: 0, y1: 0, x2: 0, y2: 1, from: strong, to: 0 };
     } else if (comp.emptyArea === "bottom") {
-        const y = Math.max(0, tb.y - H * 0.1);
+        const y = Math.max(0, tb.y - H * 0.18);
         rect = { x: 0, y, w: W, h: H - y };
         grad = { x1: 0, y1: 0, x2: 0, y2: 1, from: 0, to: strong };
     } else if (comp.emptyArea === "left side") {
-        rect = { x: 0, y: 0, w: Math.min(W, tb.x + tb.w + W * 0.08), h: H };
+        rect = { x: 0, y: 0, w: Math.min(W, tb.x + tb.w + W * 0.16), h: H };
         grad = { x1: 0, y1: 0, x2: 1, y2: 0, from: strong, to: 0 };
     } else {
-        const x = Math.max(0, tb.x - W * 0.08);
+        const x = Math.max(0, tb.x - W * 0.16);
         rect = { x, y: 0, w: W - x, h: H };
         grad = { x1: 0, y1: 0, x2: 1, y2: 0, from: 0, to: strong };
     }
+    const midFrom = grad.from > grad.to ? (grad.from * 0.85).toFixed(2) : (grad.to * 0.15).toFixed(2);
+    const midOffset = grad.from > grad.to ? "0.6" : "0.4";
     return `<defs><linearGradient id="scrim" x1="${grad.x1}" y1="${grad.y1}" x2="${grad.x2}" y2="${grad.y2}">` +
-        `<stop offset="0" stop-color="${color}" stop-opacity="${grad.from}"/><stop offset="1" stop-color="${color}" stop-opacity="${grad.to}"/></linearGradient></defs>` +
+        `<stop offset="0" stop-color="${color}" stop-opacity="${grad.from}"/>` +
+        `<stop offset="${midOffset}" stop-color="${color}" stop-opacity="${midFrom}"/>` +
+        `<stop offset="1" stop-color="${color}" stop-opacity="${grad.to}"/>` +
+        `</linearGradient></defs>` +
         `<rect x="${r1(rect.x)}" y="${r1(rect.y)}" width="${r1(rect.w)}" height="${r1(rect.h)}" fill="url(#scrim)"/>`;
 };
 
@@ -475,6 +495,9 @@ const textOverlaySvg = (layout, W, H, { theme = "light", scrim = true } = {}) =>
     if (scrim) parts.push(scrimSvg(layout, W, H, theme));
     // each block in a labelled group: the words stay readable for screen readers / tests even when drawn as paths
     const group = (role, text, inner) => `<g data-role="${role}" aria-label="${esc(text)}">${inner}</g>`;
+    if (L.kicker) {
+        parts.push(group("kicker", L.kicker.text, lineSvg(headT, L.kicker.text, L.kicker.fs, L.x, L.kicker.y, anchor, `fill="${accent}" letter-spacing="2px" font-weight="800"`)));
+    }
     if (L.headline.lines.length) {
         parts.push(group("headline", L.headline.lines.join(" "), L.headline.lines
             .map((l, i) => lineSvg(headT, l, L.headline.fs, L.x, L.headline.y + i * L.headline.fs * L.lineHeight, anchor, `fill="${main}"`)).join("")));

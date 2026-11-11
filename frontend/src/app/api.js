@@ -378,5 +378,43 @@ export const disconnectYoutubeChannel = (productId) =>
 
 export const testYoutube = () => call("/api/youtube/test");
 
+/* ── 7-Day Batch AI Content Planner API ── */
+export const createWeeklyPlan = (payload) =>
+  call("/api/weekly-planner/create", { method: "POST", body: payload });
+
+export const getLatestWeeklyPlan = (productId) =>
+  call(`/api/weekly-planner/latest${productId ? `?productId=${encodeURIComponent(productId)}` : ""}`);
+
+export const getWeeklyPlanById = (id) =>
+  call(`/api/weekly-planner/${id}`);
+
+export const addWeeklySlot = (planId, slotData) =>
+  call(`/api/weekly-planner/${planId}/slots`, { method: "POST", body: slotData });
+
+export const updateWeeklySlot = (planId, slotId, updates) =>
+  call(`/api/weekly-planner/${planId}/slots/${slotId}`, { method: "PATCH", body: updates });
+
+export const removeWeeklySlot = (planId, slotId) =>
+  call(`/api/weekly-planner/${planId}/slots/${slotId}`, { method: "DELETE" });
+
+export const generateWeeklyAssets = (planId) =>
+  call(`/api/weekly-planner/${planId}/generate-assets`, { method: "POST" });
+
+export const regenerateWeeklySlot = (planId, slotId) =>
+  call(`/api/weekly-planner/${planId}/slots/${slotId}/regenerate`, { method: "POST" });
+
+export const toggleWeeklySlotApproval = (planId, slotId) =>
+  call(`/api/weekly-planner/${planId}/slots/${slotId}/approve`, { method: "POST" });
+
+export const approveAllWeeklySlots = (planId) =>
+  call(`/api/weekly-planner/${planId}/approve-all`, { method: "POST" });
+
+export const scheduleAllWeeklySlots = (planId) =>
+  call(`/api/weekly-planner/${planId}/schedule-all`, { method: "POST" });
+
+export const deleteWeeklyPlan = (planId) =>
+  call(`/api/weekly-planner/${planId}`, { method: "DELETE" });
+
+
 
 

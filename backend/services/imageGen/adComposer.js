@@ -9,6 +9,7 @@ const { COMPOSITIONS } = require("../../ai/imageGen/AdLayoutSpecs.js");
 const { textOverlaySvg, canvasOf, px, areasOf } = require("./layoutRenderer.js");
 const Brand = require("../../ai/imageGen/BrandKit.js");
 const { cutOutLogo } = require("./logoCutout.js");
+const { detectVisualSubject } = require("./visualSubjectDetector.js");
 
 const svgToPng = (svg) => sharp(Buffer.from(svg)).png().toBuffer();
 
@@ -104,8 +105,31 @@ const logoBrightness = async (png) => {
 const composeAd = async ({ layout: layoutIn, photo, logo = null, theme = "auto" }) => {
     let layout = layoutIn;
     const { W, H } = canvasOf(layout);
-    const comp = COMPOSITIONS[layout.composition];
     const base = await sharp(photo).resize(W, H, { fit: "cover", position: "centre", kernel: "lanczos3" }).removeAlpha().png().toBuffer();
+
+    // ── Intelligent Image Analysis: Computer Vision Saliency & Subject Detection ──
+    const visualAnalysis = await detectVisualSubject(base).catch(() => null);
+    if (visualAnalysis) {
+        const plannedComp = COMPOSITIONS[layout.composition] || COMPOSITIONS["text-top"];
+        const subjectBox = visualAnalysis.subjectBox; // 0-100%
+        const textPct = plannedComp.text; // 0-100%
+
+        // Intersection between planned text box and detected hero subject
+        const ix = Math.max(0, Math.min(textPct.x + textPct.w, subjectBox.x + subjectBox.w) - Math.max(textPct.x, subjectBox.x));
+        const iy = Math.max(0, Math.min(textPct.y + textPct.h, subjectBox.y + subjectBox.h) - Math.max(textPct.y, subjectBox.y));
+        const overlapRatio = (ix * iy) / (textPct.w * textPct.h);
+
+        // If planned text would collide with hero product, adapt composition to verified negative space
+        if (overlapRatio > 0.12 && visualAnalysis.bestPlacement && COMPOSITIONS[visualAnalysis.bestPlacement]) {
+            layout = { ...layout, composition: visualAnalysis.bestPlacement, autoAdapted: true };
+        } else if (overlapRatio > 0.12) {
+            // Default to text-top if subject is in lower half, else text-bottom
+            const fallbackPlacement = subjectBox.y > 35 ? "text-top" : "text-bottom";
+            layout = { ...layout, composition: fallbackPlacement, autoAdapted: true };
+        }
+    }
+
+    const comp = COMPOSITIONS[layout.composition] || COMPOSITIONS["text-top"];
 
     // the logo's own background (white / blue box, white tile …) -> transparent, empty margin trimmed
     if (logo) logo = (await cutOutLogo(logo).catch(() => null))?.png || logo;
@@ -140,6 +164,29 @@ const composeAd = async ({ layout: layoutIn, photo, logo = null, theme = "auto" 
         const top = Math.round(bottom ? lb.y + lb.h - fitted.info.height : lb.y);
         layers.push({ input: fitted.data, left, top });
         logoUsed = "as-uploaded";
+    } else {
+        // Fallback: If no logo image file is uploaded, render the brand name as clean typography (no box)
+        const brandName = (layout.brand?.brandName || layout.brandName || layout.productName || layout.brand?.name || "").trim();
+        if (brandName) {
+            const lb = px(comp.logo, W, H);
+            const right = lb.x + lb.w / 2 > W / 2;
+            const bottom = lb.y + lb.h / 2 > H / 2;
+            const logoColor = useTheme === "light" ? "#ffffff" : "#111111";
+            const fs = Math.round(Math.min(24, Math.max(15, lb.h * 0.48)));
+            const textW = Math.round(brandName.length * fs * 0.65);
+            const badgeW = textW + 20;
+            const badgeH = Math.round(fs * 2);
+            const left = Math.round(right ? Math.min(W - badgeW - W * 0.04, lb.x + lb.w - badgeW) : Math.max(W * 0.04, lb.x));
+            const top = Math.round(bottom ? Math.min(H - badgeH - H * 0.04, lb.y + lb.h - badgeH) : Math.max(H * 0.04, lb.y));
+
+            const badgeSvg = Buffer.from(
+                `<svg xmlns="http://www.w3.org/2000/svg" width="${badgeW}" height="${badgeH}">` +
+                `<text x="${badgeW / 2}" y="${Math.round(badgeH / 2 + fs * 0.35)}" font-family="system-ui, -apple-system, sans-serif" font-size="${fs}" font-weight="900" letter-spacing="2px" fill="${logoColor}" text-anchor="middle">${brandName.toUpperCase()}</text>` +
+                `</svg>`
+            );
+            layers.push({ input: badgeSvg, left, top });
+            logoUsed = "wordmark-clean";
+        }
     }
 
     const jpeg = await sharp(base).composite(layers).jpeg({ quality: 92, mozjpeg: true, chromaSubsampling: "4:4:4" }).toBuffer();

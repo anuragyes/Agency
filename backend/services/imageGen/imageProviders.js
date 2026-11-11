@@ -256,7 +256,53 @@ const gemini = (client = geminiClient) => ({
     },
 });
 
-/* ── Cloudflare Workers AI (free) — same natural-language prompt as Gemini, product photo as a reference image ── */
+/* ── Cloudflare Workers AI (free) — lean prompt: FLUX hallucinates text if the prompt is too verbose ── */
+
+/**
+ * FLUX-safe prompt builder.
+ * Unlike Gemini, FLUX is a diffusion model that literally paints words from the prompt
+ * into the image as distorted letters. So we strip ALL layout-talk, style explanations,
+ * brand instructions, and "do-not" sentences — giving FLUX only a short visual description.
+ */
+const CF_COMPOSITION_HINT = {
+    'text-top':     'hero product placed strictly in the lower half of the frame, upper 45% completely open, uncluttered, clean softly blurred background for copy space',
+    'text-bottom':  'hero product placed strictly in the upper half of the frame, lower 45% of the table surface completely open, uncluttered, clean softly blurred for copy space',
+    'product-left': 'hero product placed strictly on the far left side of the frame, entire right half of the image completely open and empty copy space with clean soft background',
+    'product-right':'hero product placed strictly on the far right side of the frame, entire left half of the image completely open and empty copy space with clean soft background',
+    'flatlay':      'overhead flat-lay composition, hero product placed in the upper center, lower third of the frame completely clear and empty for copy space',
+};
+const CF_NO_TEXT =
+    ', NO text, NO letters, NO words, NO watermarks, NO logos, NO headlines, ' +
+    'NO captions, NO overlays, NO labels, NO writing, NO signs, NO typography, ' +
+    'NO numbers, NO brand marks, NO badges, NO slogans';
+
+const buildCloudflarePrompt = ({ layout, userPrompt }) => {
+    // Start from the core visual description — strip layout instructions
+    const core = withoutLayoutTalk(
+        layout.sdPromptCore || userPrompt || layout.sdPrompt || ''
+    );
+    // Add product name as a simple noun phrase (no percentages, no "leave space for …")
+    const product = layout.productName
+        ? `${layout.productName} product, sharp focus, clearly visible`
+        : '';
+    // Visual style: color grade / mood — stripped of layout talk
+    const styleLook = layout.style?.look ? withoutLayoutTalk(layout.style.look) : '';
+    // Camera / composition hint (safe, no numbers)
+    const cameraHint = CF_COMPOSITION_HINT[layout.composition] || 'product prominently placed';
+    // Quality booster — always last
+    const quality =
+        'professional commercial product photography, studio lighting, ' +
+        'photorealistic, sharp, 8k uhd, clean composition';
+
+    return [core, product, styleLook, cameraHint, quality]
+        .map((s) => (s || '').trim())
+        .filter(Boolean)
+        .join('. ')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/\.{2,}/g, '.')
+        .slice(0, 1800); // FLUX accepts up to ~2000 chars; keep headroom for the no-text suffix
+};
+
 const cloudflare = (client = cloudflareClient) => ({
     name: "cloudflare",
     label: "Cloudflare AI (free)",
@@ -289,7 +335,7 @@ const cloudflare = (client = cloudflareClient) => ({
             controlPng = await svgToPng(renderScribbleSvg(layout, { size: "final", invert: true }));
             if (mode === "sketch") images.push({ data: controlPng });
         }
-        const prompt = buildGeminiPrompt({ layout, mode, userPrompt, hasPhoto: mode === "product", hasSketch: mode === "sketch" });
+        const prompt = buildCloudflarePrompt({ layout, userPrompt }) + CF_NO_TEXT;
         const out = await client.generateImage({ prompt, images, aspectRatio: layout.aspectRatio || "4:5", seed: Number.isInteger(seed) && seed > 0 ? seed : undefined });
         return { image: out.image, controlPng, seed: seed || null, ms: out.ms, model: `Cloudflare · ${String(out.model).split("/").pop()}`, controlModel: mode, warnings: [], prompt };
     },
@@ -308,4 +354,4 @@ const getImageProvider = (name = process.env.IMAGE_PROVIDER) => {
     return make();
 };
 
-module.exports = { getImageProvider, cloudflare, gemini, webui, stability, PROVIDERS, MODES, productSubject, lightDirectionOf, buildGeminiPrompt };
+module.exports = { getImageProvider, cloudflare, gemini, webui, stability, PROVIDERS, MODES, productSubject, lightDirectionOf, buildGeminiPrompt, buildCloudflarePrompt };

@@ -21,6 +21,7 @@ import ScheduleFields from "../ui/ScheduleFields";
 import ProjectSelectorHub from "../ui/ProjectSelectorHub";
 import CreateProjectModal from "../ui/CreateProjectModal";
 import BrandKnowledgeModal from "../ui/BrandKnowledgeModal";
+import WeeklyPlannerView from "../ui/WeeklyPlannerView";
 import { useWorkspace } from "../store";
 import {
   STUDIO_PLATFORMS,
@@ -129,6 +130,7 @@ export default function ContentStudio() {
   // Project & Knowledge Modals
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [knowledgeModalOpen, setKnowledgeModalOpen] = useState(false);
+  const [studioMode, setStudioMode] = useState("single");
 
   // Prompt Required Popup Modal & Validation State
   const [promptModalOpen, setPromptModalOpen] = useState(false);
@@ -685,7 +687,88 @@ export default function ContentStudio() {
         </Card>
       )}
 
-      {/* ───── 3-Step Navigation Bar ───── */}
+      {/* ───── Studio Mode Switcher: Single Post vs Weekly Sprint ───── */}
+      <div
+        className="row between wrap"
+        style={{
+          background: "var(--sa-card-bg, #fff)",
+          border: "1px solid var(--sa-border)",
+          borderRadius: 16,
+          padding: "6px 8px",
+          marginBottom: 20,
+          alignItems: "center",
+          gap: 12,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+        }}
+      >
+        <div className="row wrap" style={{ gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => setStudioMode("single")}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "9px 18px",
+              borderRadius: 12,
+              border: "none",
+              background: studioMode === "single" ? "var(--sa-primary, #5b4cf6)" : "transparent",
+              color: studioMode === "single" ? "#fff" : "inherit",
+              fontWeight: 700,
+              fontSize: 13.5,
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <Icon name="pen" size={16} /> Single Post Studio
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setStudioMode("weekly")}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "9px 18px",
+              borderRadius: 12,
+              border: "none",
+              background: studioMode === "weekly" ? "var(--sa-primary, #5b4cf6)" : "transparent",
+              color: studioMode === "weekly" ? "#fff" : "inherit",
+              fontWeight: 700,
+              fontSize: 13.5,
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <Icon name="calendar" size={16} /> 7-Day Weekly Sprint (Batch Planner)
+            <span
+              style={{
+                background: studioMode === "weekly" ? "rgba(255,255,255,0.25)" : "#10b981",
+                color: "#fff",
+                borderRadius: 10,
+                padding: "2px 7px",
+                fontSize: 10,
+                fontWeight: 800,
+              }}
+            >
+              NEW
+            </span>
+          </button>
+        </div>
+
+        <span className="small muted" style={{ paddingRight: 8 }}>
+          {studioMode === "single"
+            ? "Craft and publish a high-impact individual post"
+            : "Plan & generate 7 days of varied content concurrently in ~30s"}
+        </span>
+      </div>
+
+      {studioMode === "weekly" ? (
+        <WeeklyPlannerView />
+      ) : (
+        <>
+          {/* ───── 3-Step Navigation Bar ───── */}
       <FlowSteps
         steps={STEPS}
         current={step}
@@ -1848,6 +1931,9 @@ export default function ContentStudio() {
             </div>
           </form>
         </Modal>
+      )}
+
+      </>
       )}
 
       {/* ───── Hidden file input (always mounted so fileInputRef works on all steps) ───── */}

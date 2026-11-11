@@ -38,14 +38,12 @@ ${brand
         ? `- fontPair: always "${Brand.FONT_PAIR}" (the brand's fixed typography).`
         : `- fontPair: the typography for the texts — pick ONE that fits the product and mood: ${fonts}.`}
 - scene: 1 short sentence describing the setting (surface, background, light, mood).
-- sdPrompt: an English prompt for a PHOTOREALISTIC advertising photo, 60–180 words, written as clear sentences.
-  KEEP EVERY concrete detail the user asked for — people (who, clothing, what they are doing, hands), food, utensils,
-  setting, props, camera angle, depth of field, lighting, mood. Do not drop, generalize or replace the user's scene.
-  Describe the product's look (material, color, shape, packaging colors) and where it stands, plus which part of the frame is only soft,
-  out-of-focus background (in plain words, e.g. "the lower part of the frame"). Never write percentages or numbers for areas, and never
-  mention text, headline, copy space or logo space — the image model paints those words / numbers into the photo.
-  NEVER ask for readable text, brand names, words, letters or logos IN the photo (AI misspells them) — say "plain label" instead;
-  the real logo and texts are added afterwards.
+- sdPrompt: an English prompt for a WORLD-CLASS PHOTOREALISTIC advertising photo, 70–160 words, written as clear natural sentences.
+  Focus strictly on commercial product photography aesthetics: realistic studio or environmental lighting (directional morning sunlight, soft rim lighting, natural bounce), tactile materials and textures (condensation, wood grain, stone, steam, reflective glass), shallow depth of field, and authentic atmospheric mood.
+  KEEP EVERY concrete detail the user asked for — people (natural actions, relaxed hands), ingredients, setting, props, camera angle, lighting, mood. Do not drop, generalize or replace the user's scene.
+  Describe the product's look (material, finish, color, shape, unprinted packaging) and where it stands, with the corresponding area (e.g. upper half, lower half, right side) having a soft, calm, out-of-focus background for typography placement.
+  ABSOLUTE RULE — ZERO TEXT IN PHOTO: Never write percentages, dimensions, numbers, or words like "text", "copy space", "headline", "logo", or "typography" — image models hallucinate those words as garbled letters.
+  NEVER ask for readable text, brand names, slogans, labels, words, or letters IN the photo — say "clean unprinted label" or "plain minimalist packaging" instead; all headlines, copy, badges, and brand logos are rendered programmatically on top in Layer 2 with crisp vector fonts.
 - productDescription: 5–15 words describing only the product as it looks (e.g. "glass jar of golden ghee with gold lid and cream label").
 - negativePrompt: extra things to avoid for this scene (short, comma-separated), may be "".
 - styles: exactly ${MAX_VARIANTS} CLEARLY DIFFERENT visual styles for this same ad — the image model makes one photo per style and the user picks.
